@@ -3,6 +3,7 @@ use std::path::Path;
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+mod account_manager;
 mod account_metadata;
 mod account_subscriptions;
 mod accounts;
@@ -257,6 +258,95 @@ pub struct ApiKeyModelTokenUsageSummary {
     pub reasoning_output_tokens: i64,
     pub total_tokens: i64,
     pub estimated_cost_usd: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct AppUser {
+    pub id: String,
+    pub username: String,
+    pub display_name: Option<String>,
+    pub password_hash: String,
+    pub role: String,
+    pub status: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub last_login_at: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct AppUserSession {
+    pub id: String,
+    pub user_id: String,
+    pub token_hash: String,
+    pub expires_at: i64,
+    pub created_at: i64,
+    pub last_seen_at: Option<i64>,
+    pub revoked_at: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct AppProject {
+    pub id: String,
+    pub name: String,
+    pub owner_user_id: Option<String>,
+    pub status: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct AppWallet {
+    pub id: String,
+    pub owner_kind: String,
+    pub owner_id: String,
+    pub balance_credit_micros: i64,
+    pub frozen_credit_micros: i64,
+    pub status: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct AppWalletLedgerEntry {
+    pub id: String,
+    pub wallet_id: String,
+    pub entry_kind: String,
+    pub amount_credit_micros: i64,
+    pub balance_after_credit_micros: i64,
+    pub request_log_id: Option<i64>,
+    pub api_key_id: Option<String>,
+    pub pricing_rule_id: Option<String>,
+    pub raw_usage_json: Option<String>,
+    pub note: Option<String>,
+    pub created_by_user_id: Option<String>,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct ApiKeyOwner {
+    pub key_id: String,
+    pub owner_kind: String,
+    pub owner_user_id: Option<String>,
+    pub project_id: Option<String>,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct BillingRule {
+    pub id: String,
+    pub name: String,
+    pub status: String,
+    pub priority: i64,
+    pub multiplier_millis: i64,
+    pub model_pattern: Option<String>,
+    pub service_tier: Option<String>,
+    pub user_id: Option<String>,
+    pub project_id: Option<String>,
+    pub api_key_id: Option<String>,
+    pub starts_at: Option<i64>,
+    pub ends_at: Option<i64>,
+    pub created_at: i64,
+    pub updated_at: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -785,6 +875,11 @@ impl Storage {
             include_str!("../../migrations/056_quota_pools.sql"),
             |s| s.ensure_quota_pool_tables(),
         )?;
+        self.apply_sql_or_compat_migration(
+            "057_account_manager",
+            include_str!("../../migrations/057_account_manager.sql"),
+            |s| s.ensure_account_manager_tables(),
+        )?;
         self.ensure_api_key_rotation_columns()?;
         self.ensure_aggregate_apis_table()?;
         self.ensure_aggregate_api_secrets_table()?;
@@ -799,6 +894,7 @@ impl Storage {
         self.ensure_model_catalog_models_table()?;
         self.ensure_account_subscriptions_table()?;
         self.ensure_quota_pool_tables()?;
+        self.ensure_account_manager_tables()?;
         Ok(())
     }
 

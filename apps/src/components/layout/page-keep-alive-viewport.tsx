@@ -13,9 +13,13 @@ import { Loader2 } from "lucide-react";
 import { usePathname } from "next/navigation";
 import {
   type TopLevelRoutePath,
+  getAllowedTopLevelRoutes,
+  getFirstAllowedTopLevelRoutePath,
   getTopLevelRouteLabel,
+  isTopLevelRouteAllowedForRole,
   toTopLevelRoutePath,
 } from "@/lib/app-shell/top-level-routes";
+import { useAppSession } from "@/hooks/useAppSession";
 import { useI18n } from "@/lib/i18n/provider";
 import { useAppStore } from "@/lib/store/useAppStore";
 import { cn } from "@/lib/utils";
@@ -27,6 +31,7 @@ const LAZY_PAGE_COMPONENTS: Record<
   LazyExoticComponent<ComponentType>
 > = {
   "/accounts": lazy(() => import("@/app/accounts/page")),
+  "/account-manager": lazy(() => import("@/app/account-manager/page")),
   "/aggregate-api": lazy(() => import("@/app/aggregate-api/page")),
   "/apikeys": lazy(() => import("@/app/apikeys/page")),
   "/quota": lazy(() => import("@/app/quota/page")),
@@ -98,6 +103,9 @@ export function PageKeepAliveViewport({
   const syncShellPathFromLocation = useAppStore(
     (state) => state.syncShellPathFromLocation,
   );
+  const pruneShellTabs = useAppStore((state) => state.pruneShellTabs);
+  const { data: session, isLoading: isSessionLoading } = useAppSession();
+  const role = session?.role ?? "member";
 
   useEffect(() => {
     syncShellPathFromLocation(normalizedInitialPath);
@@ -118,10 +126,19 @@ export function PageKeepAliveViewport({
     document.title = `${t(getTopLevelRouteLabel(currentShellPath))} - CodexManager`;
   }, [currentShellPath, t]);
 
+  useEffect(() => {
+    if (isSessionLoading) return;
+    const allowedPaths = getAllowedTopLevelRoutes(role).map((route) => route.path);
+    pruneShellTabs(allowedPaths, getFirstAllowedTopLevelRoutePath(role));
+  }, [isSessionLoading, pruneShellTabs, role]);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="relative min-h-0 flex-1">
         {openShellTabs.map((path) => {
+          if (!isTopLevelRouteAllowedForRole(path, role)) {
+            return null;
+          }
           const isActive = path === currentShellPath;
           const isInitialPanel = path === normalizedInitialPath;
 

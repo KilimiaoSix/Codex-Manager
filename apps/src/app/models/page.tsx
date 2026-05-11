@@ -41,6 +41,7 @@ import {
 import { ConfirmDialog } from "@/components/modals/confirm-dialog";
 import { ModelCatalogModal } from "@/components/modals/model-catalog-modal";
 import { useDesktopPageActive } from "@/hooks/useDesktopPageActive";
+import { isAdminRole, useAppSession } from "@/hooks/useAppSession";
 import { useManagedModels } from "@/hooks/useManagedModels";
 import { usePageTransitionReady } from "@/hooks/usePageTransitionReady";
 import { findBestMatchingModel } from "@/lib/api/model-catalog";
@@ -67,6 +68,8 @@ function MiniStatBadge({
 
 export default function ModelsPage() {
   const { t } = useI18n();
+  const { data: session } = useAppSession();
+  const isAdminMode = isAdminRole(session?.role);
   const {
     models,
     isLoading,
@@ -95,7 +98,7 @@ export default function ModelsPage() {
   const { data: quotaModelPools } = useQuery({
     queryKey: ["quota", "model-pools"],
     queryFn: () => quotaClient.modelPools(),
-    enabled: isServiceReady && isPageActive,
+    enabled: isServiceReady && isPageActive && isAdminMode,
     retry: 1,
   });
 
@@ -264,6 +267,7 @@ export default function ModelsPage() {
                     {t("按 slug、显示名称或描述快速定位，并结合来源与覆写状态查看当前目录。")}
                   </p>
                 </div>
+                {isAdminMode ? (
                 <div className="flex flex-wrap gap-2 lg:justify-end">
                   <Button
                     variant="outline"
@@ -303,6 +307,7 @@ export default function ModelsPage() {
                     {t("新增自定义模型")}
                   </Button>
                 </div>
+                ) : null}
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <MiniStatBadge label={t("模型总数")} value={`${stats.total}`} />
@@ -315,7 +320,7 @@ export default function ModelsPage() {
                 <Badge variant="secondary" className="rounded-full px-3 py-1">
                   {t("共 {count} 条", { count: filteredModels.length })}
                 </Badge>
-                {selectedSlugs.length > 0 ? (
+                {isAdminMode && selectedSlugs.length > 0 ? (
                   <Badge variant="secondary" className="rounded-full px-3 py-1">
                     {t("已选 {count} 项", { count: selectedSlugs.length })}
                   </Badge>
@@ -368,22 +373,26 @@ export default function ModelsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      {isAdminMode ? (
                       <TableHead className="w-12 text-center">
                         <Checkbox
                           checked={allVisibleSelected}
                           onCheckedChange={toggleSelectAllVisible}
                         />
                       </TableHead>
+                      ) : null}
                       <TableHead>{t("模型")}</TableHead>
                       <TableHead>{t("来源")}</TableHead>
                       <TableHead>{t("API")}</TableHead>
-                      <TableHead>{t("额度池")}</TableHead>
+                      <TableHead>{isAdminMode ? t("额度池") : t("状态")}</TableHead>
                       <TableHead>{t("可见性")}</TableHead>
                       <TableHead>{t("推理等级")}</TableHead>
                       <TableHead>{t("更新时间")}</TableHead>
+                      {isAdminMode ? (
                       <TableHead className="table-sticky-action-head w-[88px] text-right">
                         {t("操作")}
                       </TableHead>
+                      ) : null}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -391,12 +400,14 @@ export default function ModelsPage() {
                       const quotaPool = quotaPoolByModel.get(model.slug);
                       return (
                       <TableRow key={model.slug}>
+                        {isAdminMode ? (
                         <TableCell className="text-center">
                           <Checkbox
                             checked={selectedSlugs.includes(model.slug)}
                             onCheckedChange={() => toggleSelectSlug(model.slug)}
                           />
                         </TableCell>
+                        ) : null}
                         <TableCell className="min-w-[280px]">
                           <div className="space-y-1">
                             <div className="flex items-center gap-2">
@@ -432,6 +443,7 @@ export default function ModelsPage() {
                           )}
                         </TableCell>
                         <TableCell className="min-w-[170px]">
+                          {isAdminMode ? (
                           <div className="space-y-1">
                             <div className="text-sm font-medium">
                               {quotaPool?.totalRemainingTokens == null
@@ -470,6 +482,14 @@ export default function ModelsPage() {
                               })}
                             </div>
                           </div>
+                          ) : (
+                            <Badge
+                              variant={model.supportedInApi ? "default" : "secondary"}
+                              className="text-[11px]"
+                            >
+                              {model.supportedInApi ? t("可调用") : t("不可调用")}
+                            </Badge>
+                          )}
                         </TableCell>
                         <TableCell>
                           {model.visibility === "list" ? (
@@ -488,6 +508,7 @@ export default function ModelsPage() {
                         <TableCell className="text-sm text-muted-foreground">
                           {formatTsFromSeconds(model.updatedAt, t("未同步"))}
                         </TableCell>
+                        {isAdminMode ? (
                         <TableCell className="table-sticky-action-cell text-right">
                           <DropdownMenu>
                             <DropdownMenuTrigger render={<span />} nativeButton={false}>
@@ -515,6 +536,7 @@ export default function ModelsPage() {
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
+                        ) : null}
                       </TableRow>
                       );
                     })}
@@ -526,6 +548,7 @@ export default function ModelsPage() {
         </Card>
       </div>
 
+      {isAdminMode ? (
       <ModelCatalogModal
         open={modalOpen}
         onOpenChange={setModalOpen}
@@ -534,7 +557,9 @@ export default function ModelsPage() {
         isSaving={isSaving}
         onSave={saveModel}
       />
+      ) : null}
 
+      {isAdminMode ? (
       <ConfirmDialog
         open={deleteTargetCount > 0}
         onOpenChange={(open) => {
@@ -582,6 +607,7 @@ export default function ModelsPage() {
           }
         }}
       />
+      ) : null}
     </>
   );
 }

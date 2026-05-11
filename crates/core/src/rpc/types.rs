@@ -453,6 +453,31 @@ pub struct QuotaOverviewResult {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct BillingRuleResult {
+    pub id: String,
+    pub name: String,
+    pub status: String,
+    pub priority: i64,
+    pub multiplier_millis: i64,
+    pub model_pattern: Option<String>,
+    pub service_tier: Option<String>,
+    pub user_id: Option<String>,
+    pub project_id: Option<String>,
+    pub api_key_id: Option<String>,
+    pub starts_at: Option<i64>,
+    pub ends_at: Option<i64>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuotaBillingRulesResult {
+    pub items: Vec<BillingRuleResult>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct QuotaModelUsageItem {
     pub model: String,
     pub provider: Option<String>,
@@ -1191,6 +1216,105 @@ pub struct StartupSnapshotResult {
     pub manual_preferred_account_id: Option<String>,
     pub request_log_today_summary: RequestLogTodaySummaryResult,
     pub request_logs: Vec<RequestLogSummary>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemberDashboardWalletResult {
+    pub id: String,
+    pub balance_credit_micros: i64,
+    pub frozen_credit_micros: i64,
+    pub available_credit_micros: i64,
+    pub status: String,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemberDashboardApiKeySummary {
+    pub total_count: i64,
+    pub enabled_count: i64,
+    pub disabled_count: i64,
+    pub last_used_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemberDashboardUsageToday {
+    pub input_tokens: i64,
+    pub cached_input_tokens: i64,
+    pub output_tokens: i64,
+    pub reasoning_output_tokens: i64,
+    pub total_tokens: i64,
+    pub estimated_cost_usd: f64,
+    pub total_count: i64,
+    pub success_count: i64,
+    pub error_count: i64,
+    pub success_rate: Option<f64>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemberDashboardUsagePoint {
+    pub day_start_ts: i64,
+    pub day_end_ts: i64,
+    pub total_tokens: i64,
+    pub estimated_cost_usd: f64,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemberDashboardKeyUsage {
+    pub key_id: String,
+    pub name: Option<String>,
+    pub model_slug: Option<String>,
+    pub status: String,
+    pub today_tokens: i64,
+    pub today_cost_usd: f64,
+    pub total_tokens: i64,
+    pub total_cost_usd: f64,
+    pub last_used_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemberDashboardModelUsage {
+    pub model: String,
+    pub total_tokens: i64,
+    pub estimated_cost_usd: f64,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemberDashboardAlert {
+    pub kind: String,
+    pub severity: String,
+    pub title: String,
+    pub message: String,
+    pub action_label: Option<String>,
+    pub action_href: Option<String>,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemberDashboardSummaryResult {
+    pub user_id: Option<String>,
+    pub distribution_enabled: bool,
+    pub wallet: Option<MemberDashboardWalletResult>,
+    pub api_key_summary: MemberDashboardApiKeySummary,
+    pub usage_today: MemberDashboardUsageToday,
+    #[serde(default)]
+    pub usage_trend_7d: Vec<MemberDashboardUsagePoint>,
+    #[serde(default)]
+    pub top_keys: Vec<MemberDashboardKeyUsage>,
+    #[serde(default)]
+    pub top_models: Vec<MemberDashboardModelUsage>,
+    #[serde(default)]
+    pub available_models: Vec<ModelInfo>,
+    #[serde(default)]
+    pub recent_logs: Vec<RequestLogSummary>,
+    #[serde(default)]
+    pub alerts: Vec<MemberDashboardAlert>,
 }
 
 #[cfg(test)]

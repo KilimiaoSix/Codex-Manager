@@ -4,6 +4,7 @@ import type { MessageCatalog } from "./types";
 
 export const EN_MESSAGES: MessageCatalog = {
   仪表盘: "Dashboard",
+  号池管理: "Account Pool",
   账号管理: "Accounts",
   聚合API: "Aggregate APIs",
   平台密钥: "API Keys",
@@ -11,6 +12,16 @@ export const EN_MESSAGES: MessageCatalog = {
   请求日志: "Request Logs",
   应用设置: "Settings",
   设置: "Settings",
+  访问控制: "Access Control",
+  退出登录: "Log out",
+  账号系统: "Account system",
+  公开访问: "Public access",
+  保存访问控制: "Save access control",
+  可分发成员: "Billable members",
+  不包含管理员账号: "Excludes administrator accounts",
+  不参与分发: "Not billable",
+  管理员不设置额度: "Admins do not use quota",
+  选择可分发成员: "Select a billable member",
   通用: "General",
   外观: "Appearance",
   网关: "Gateway",
@@ -288,6 +299,13 @@ export const EN_MESSAGES: MessageCatalog = {
   值越小越靠前: "Smaller values appear first",
   仅修改当前账号: "Only update the current account",
   访问密码: "Access password",
+  当前访问方式: "Current access mode",
+  "统一管理 Web 登录方式、访问密码和团队额度分发。":
+    "Manage Web login mode, access password, and team quota distribution.",
+  "额度分发已开启，平台 Key 会按归属钱包扣减额度。":
+    "Quota distribution is enabled; API keys deduct from the assigned wallet.",
+  "额度分发未开启，平台 Key 不会扣减成员钱包额度。":
+    "Quota distribution is disabled; API keys do not deduct member wallet quota.",
   新密码: "New password",
   确认新密码: "Confirm new password",
   保存: "Save",

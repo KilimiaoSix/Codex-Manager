@@ -1,5 +1,15 @@
 import { invoke, invokeFirst } from "./transport";
-import { AppSettings, CodexLatestVersionInfo } from "../../types";
+import {
+  AccountManagerStatus,
+  ApiKeyOwner,
+  AppSettings,
+  AppSessionResult,
+  AppRole,
+  AppPermission,
+  AppUser,
+  AppWallet,
+  CodexLatestVersionInfo,
+} from "../../types";
 import { normalizeAppSettings } from "./normalize";
 import {
   readUpdateActionResult,
@@ -16,6 +26,117 @@ import {
   readGatewayConcurrencyRecommendation,
 } from "./gateway-settings";
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function asString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function asNumber(value: unknown, fallback = 0): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function asBoolean(value: unknown, fallback = false): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function readWallet(value: unknown): AppWallet | null {
+  const source = asRecord(value);
+  const id = asString(source.id);
+  if (!id) return null;
+  return {
+    id,
+    ownerKind: asString(source.ownerKind),
+    ownerId: asString(source.ownerId),
+    balanceCreditMicros: asNumber(source.balanceCreditMicros),
+    frozenCreditMicros: asNumber(source.frozenCreditMicros),
+    availableCreditMicros: asNumber(source.availableCreditMicros),
+    status: asString(source.status),
+    createdAt: asNumber(source.createdAt),
+    updatedAt: asNumber(source.updatedAt),
+  };
+}
+
+function readAppUser(value: unknown): AppUser {
+  const source = asRecord(value);
+  return {
+    id: asString(source.id),
+    username: asString(source.username),
+    displayName: asString(source.displayName) || null,
+    role: asString(source.role) || "member",
+    status: asString(source.status) || "active",
+    createdAt: asNumber(source.createdAt),
+    updatedAt: asNumber(source.updatedAt),
+    lastLoginAt: asNumber(source.lastLoginAt) || null,
+    wallet: readWallet(source.wallet),
+  };
+}
+
+function readApiKeyOwner(value: unknown): ApiKeyOwner {
+  const source = asRecord(value);
+  return {
+    keyId: asString(source.keyId),
+    ownerKind: asString(source.ownerKind),
+    ownerUserId: asString(source.ownerUserId) || null,
+    projectId: asString(source.projectId) || null,
+    updatedAt: asNumber(source.updatedAt),
+  };
+}
+
+function readAccountManagerStatus(value: unknown): AccountManagerStatus {
+  const source = asRecord(value);
+  return {
+    mode: asString(source.mode) || "none",
+    modeOptions: Array.isArray(source.modeOptions)
+      ? source.modeOptions.map((item) => asString(item)).filter(Boolean)
+      : ["none", "password", "accounts"],
+    passwordConfigured: asBoolean(source.passwordConfigured),
+    appUsersConfigured: asBoolean(source.appUsersConfigured),
+    appUserCount: asNumber(source.appUserCount),
+    activeAdminCount: asNumber(source.activeAdminCount),
+    distributionEnabled: asBoolean(source.distributionEnabled),
+  };
+}
+
+function readAppRole(value: unknown): AppRole {
+  const role = asString(value);
+  if (role === "admin" || role === "member" || role === "system_admin") {
+    return role;
+  }
+  return "system_admin";
+}
+
+function readPermissions(value: unknown): AppPermission[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => asString(item))
+    .filter((item): item is AppPermission =>
+      [
+        "system:admin",
+        "apikey:self",
+        "requestlog:self",
+        "models:read",
+        "profile:self",
+      ].includes(item),
+    );
+}
+
+function readAppSession(value: unknown): AppSessionResult {
+  const source = asRecord(value);
+  const currentUser = source.currentUser ? readAppUser(source.currentUser) : null;
+  return {
+    mode: asString(source.mode) || "none",
+    currentUser,
+    role: readAppRole(source.role),
+    permissions: readPermissions(source.permissions),
+    distributionEnabled: asBoolean(source.distributionEnabled),
+  };
+}
+
 export const appClient = {
   async getSettings(): Promise<AppSettings> {
     const result = await invoke<unknown>("app_settings_get");
@@ -28,6 +149,67 @@ export const appClient = {
   async getGatewayConcurrencyRecommendation(): Promise<GatewayConcurrencyRecommendation> {
     const result = await invoke<unknown>("service_gateway_concurrency_recommend_get");
     return readGatewayConcurrencyRecommendation(result);
+  },
+  async getAccountManagerStatus(): Promise<AccountManagerStatus> {
+    const result = await invoke<unknown>("service_account_manager_status");
+    return readAccountManagerStatus(result);
+  },
+  async getCurrentSession(): Promise<AppSessionResult> {
+    const result = await invoke<unknown>("service_account_manager_session_current");
+    return readAppSession(result);
+  },
+  async updateProfile(payload: {
+    displayName?: string | null;
+  }): Promise<AppUser> {
+    const result = await invoke<unknown>("service_account_manager_profile_update", payload);
+    return readAppUser(result);
+  },
+  async changePassword(payload: {
+    currentPassword: string;
+    newPassword: string;
+  }): Promise<void> {
+    await invoke<unknown>("service_account_manager_password_change", payload);
+  },
+  async listAppUsers(): Promise<AppUser[]> {
+    const result = await invoke<unknown>("service_account_manager_users_list");
+    return Array.isArray(result) ? result.map(readAppUser) : [];
+  },
+  async createAppUser(payload: {
+    username: string;
+    password: string;
+    displayName?: string | null;
+    role?: string | null;
+    initialBalanceCreditMicros?: number | null;
+  }): Promise<AppUser> {
+    const result = await invoke<unknown>("service_account_manager_user_create", {
+      payload,
+    });
+    return readAppUser(result);
+  },
+  async topUpWallet(payload: {
+    ownerKind: string;
+    ownerId: string;
+    amountCreditMicros: number;
+    note?: string | null;
+  }): Promise<AppWallet | null> {
+    const result = await invoke<unknown>("service_account_manager_wallet_top_up", payload);
+    return readWallet(result);
+  },
+  async listApiKeyOwners(): Promise<ApiKeyOwner[]> {
+    const result = await invoke<unknown>("service_account_manager_api_key_owners_list");
+    return Array.isArray(result) ? result.map(readApiKeyOwner) : [];
+  },
+  async setApiKeyOwner(payload: {
+    keyId: string;
+    ownerKind: string;
+    ownerUserId?: string | null;
+    projectId?: string | null;
+  }): Promise<ApiKeyOwner> {
+    const result = await invoke<unknown>(
+      "service_account_manager_api_key_owner_set",
+      payload
+    );
+    return readApiKeyOwner(result);
   },
   getCodexLatestVersion: () =>
     invoke<CodexLatestVersionInfo>("service_gateway_codex_latest_version_get"),

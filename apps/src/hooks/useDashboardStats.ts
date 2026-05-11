@@ -110,6 +110,7 @@ export function useDashboardStats() {
 
   return {
     stats: {
+      apiKeyCount: data?.apiKeys.length || 0,
       total: totalAccounts,
       available: availableAccounts,
       unavailable: unavailableAccounts,

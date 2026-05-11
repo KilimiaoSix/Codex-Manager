@@ -6,6 +6,7 @@ mod aggregate_api;
 mod apikey;
 pub(crate) mod app_settings;
 mod auth;
+mod dashboard;
 mod errors;
 mod gateway;
 mod http;
@@ -13,6 +14,7 @@ mod lifecycle;
 mod plugin;
 mod quota;
 mod requestlog;
+mod rpc_actor;
 mod rpc_dispatch;
 mod runtime;
 mod startup_snapshot;
@@ -93,10 +95,11 @@ pub use app_settings::{
     set_lightweight_mode_on_close_to_tray_setting, set_saved_service_addr, set_service_bind_mode,
     set_ui_appearance_preset, set_ui_low_transparency_enabled, set_ui_theme,
     set_update_auto_check_enabled, sync_runtime_settings_from_storage, BackgroundTasksInput,
-    APP_SETTING_CLOSE_TO_TRAY_ON_CLOSE_KEY, APP_SETTING_ENV_OVERRIDES_KEY,
-    APP_SETTING_GATEWAY_ACCOUNT_MAX_INFLIGHT_KEY, APP_SETTING_GATEWAY_BACKGROUND_TASKS_KEY,
-    APP_SETTING_GATEWAY_FREE_ACCOUNT_MAX_MODEL_KEY, APP_SETTING_GATEWAY_MODEL_FORWARD_RULES_KEY,
-    APP_SETTING_GATEWAY_ORIGINATOR_KEY, APP_SETTING_GATEWAY_REQUEST_COMPRESSION_ENABLED_KEY,
+    APP_SETTING_CLOSE_TO_TRAY_ON_CLOSE_KEY, APP_SETTING_DISTRIBUTION_ENABLED_KEY,
+    APP_SETTING_ENV_OVERRIDES_KEY, APP_SETTING_GATEWAY_ACCOUNT_MAX_INFLIGHT_KEY,
+    APP_SETTING_GATEWAY_BACKGROUND_TASKS_KEY, APP_SETTING_GATEWAY_FREE_ACCOUNT_MAX_MODEL_KEY,
+    APP_SETTING_GATEWAY_MODEL_FORWARD_RULES_KEY, APP_SETTING_GATEWAY_ORIGINATOR_KEY,
+    APP_SETTING_GATEWAY_REQUEST_COMPRESSION_ENABLED_KEY,
     APP_SETTING_GATEWAY_RESIDENCY_REQUIREMENT_KEY, APP_SETTING_GATEWAY_ROUTE_STRATEGY_KEY,
     APP_SETTING_GATEWAY_SSE_KEEPALIVE_INTERVAL_MS_KEY, APP_SETTING_GATEWAY_UPSTREAM_PROXY_URL_KEY,
     APP_SETTING_GATEWAY_UPSTREAM_STREAM_TIMEOUT_MS_KEY,
@@ -104,18 +107,28 @@ pub use app_settings::{
     APP_SETTING_LIGHTWEIGHT_MODE_ON_CLOSE_TO_TRAY_KEY, APP_SETTING_SERVICE_ADDR_KEY,
     APP_SETTING_UI_APPEARANCE_PRESET_KEY, APP_SETTING_UI_CODEX_CLI_GUIDE_DISMISSED_KEY,
     APP_SETTING_UI_LOW_TRANSPARENCY_KEY, APP_SETTING_UI_THEME_KEY,
-    APP_SETTING_UPDATE_AUTO_CHECK_KEY, APP_SETTING_WEB_ACCESS_PASSWORD_HASH_KEY, DEFAULT_ADDR,
-    DEFAULT_BIND_ADDR, DEFAULT_WEB_ADDR, DEFAULT_WEB_BIND_ADDR, SERVICE_BIND_MODE_ALL_INTERFACES,
-    SERVICE_BIND_MODE_LOOPBACK, SERVICE_BIND_MODE_SETTING_KEY, WEB_ACCESS_SESSION_COOKIE_NAME,
+    APP_SETTING_UPDATE_AUTO_CHECK_KEY, APP_SETTING_WEB_ACCESS_PASSWORD_HASH_KEY,
+    APP_SETTING_WEB_AUTH_MODE_KEY, DEFAULT_ADDR, DEFAULT_BIND_ADDR, DEFAULT_WEB_ADDR,
+    DEFAULT_WEB_BIND_ADDR, SERVICE_BIND_MODE_ALL_INTERFACES, SERVICE_BIND_MODE_LOOPBACK,
+    SERVICE_BIND_MODE_SETTING_KEY, WEB_ACCESS_SESSION_COOKIE_NAME,
 };
 pub use auth::{
-    build_web_access_session_token, current_web_access_password_hash, set_web_access_password,
-    verify_web_access_password, web_access_password_configured, web_auth_status_value,
+    api_key_belongs_to_user, app_auth_status_value, app_session_result, bootstrap_app_admin,
+    build_web_access_session_token, change_app_user_password, create_app_user,
+    current_web_access_password_hash, current_web_auth_mode, distribution_enabled,
+    list_api_key_ids_for_user, list_api_key_owners, list_app_users, login_app_user,
+    logout_app_user_session, resolve_app_user_session, set_api_key_owner, set_distribution_enabled,
+    set_web_access_password, set_web_auth_mode, update_app_user_profile,
+    verify_web_access_password, wallet_charge_for_request, wallet_precheck_for_api_key,
+    wallet_top_up, web_access_auth_status_value, web_access_password_configured,
+    web_auth_status_value, ApiKeyOwnerResult, AppLoginResult, AppSessionResult,
+    AppSessionUserResult, AppUserCreateInput, AppUserPublicResult, AppWalletResult,
 };
 pub use auth::{rpc_auth_token, rpc_auth_token_matches};
 pub use lifecycle::bootstrap::{initialize_storage_if_needed, portable};
 pub use lifecycle::shutdown::{clear_shutdown_flag, request_shutdown, shutdown_requested};
 pub use lifecycle::startup::{start_one_shot_server, start_server, ServerHandle};
+pub use rpc_actor::{RpcActor, ROLE_ADMIN, ROLE_MEMBER, ROLE_SYSTEM_ADMIN};
 pub use usage_refresh::{set_usage_refresh_completed_handler, UsageRefreshCompletedEvent};
 
 /// 函数 `test_env_guard`
@@ -151,6 +164,10 @@ pub(crate) fn test_env_guard() -> std::sync::MutexGuard<'static, ()> {
 /// 返回函数执行结果
 pub(crate) fn handle_request(req: JsonRpcRequest) -> JsonRpcMessage {
     rpc_dispatch::handle_request(req)
+}
+
+pub(crate) fn handle_request_with_actor(req: JsonRpcRequest, actor: RpcActor) -> JsonRpcMessage {
+    rpc_dispatch::handle_request_with_actor(req, actor)
 }
 
 #[cfg(test)]

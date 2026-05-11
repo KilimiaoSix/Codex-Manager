@@ -1,18 +1,20 @@
 "use client";
 
 import { normalizeRoutePath } from "@/lib/utils/static-routes";
+import type { AppRole } from "@/types";
 
 export const TOP_LEVEL_ROUTE_CONFIG = [
-  { path: "/", label: "仪表盘" },
-  { path: "/accounts", label: "账号管理" },
-  { path: "/aggregate-api", label: "聚合API" },
-  { path: "/apikeys", label: "平台密钥" },
-  { path: "/quota", label: "额度中心" },
-  { path: "/models", label: "模型管理" },
-  { path: "/plugins", label: "插件中心" },
-  { path: "/logs", label: "请求日志" },
-  { path: "/settings", label: "设置" },
-  { path: "/author", label: "赞助与推荐" },
+  { path: "/", label: "仪表盘", roles: ["system_admin", "admin", "member"] },
+  { path: "/accounts", label: "号池管理", roles: ["system_admin", "admin"] },
+  { path: "/account-manager", label: "账号管理", roles: ["system_admin", "admin"] },
+  { path: "/aggregate-api", label: "聚合API", roles: ["system_admin", "admin"] },
+  { path: "/apikeys", label: "平台密钥", roles: ["system_admin", "admin", "member"] },
+  { path: "/quota", label: "额度中心", roles: ["system_admin", "admin"] },
+  { path: "/models", label: "模型管理", roles: ["system_admin", "admin", "member"] },
+  { path: "/plugins", label: "插件中心", roles: ["system_admin", "admin"] },
+  { path: "/logs", label: "请求日志", roles: ["system_admin", "admin", "member"] },
+  { path: "/settings", label: "设置", roles: ["system_admin", "admin", "member"] },
+  { path: "/author", label: "赞助与推荐", roles: ["system_admin", "admin", "member"] },
 ] as const;
 
 export type TopLevelRoutePath = (typeof TOP_LEVEL_ROUTE_CONFIG)[number]["path"];
@@ -39,4 +41,28 @@ export function getTopLevelRouteLabel(path: string): string {
     TOP_LEVEL_ROUTE_CONFIG.find((route) => route.path === normalizedPath)?.label ??
     "CodexManager"
   );
+}
+
+export function isTopLevelRouteAllowedForRole(
+  path: string,
+  role: AppRole | string | null | undefined,
+): boolean {
+  const normalizedPath = normalizeRoutePath(path);
+  const normalizedRole = (role || "system_admin") as AppRole;
+  const route = TOP_LEVEL_ROUTE_CONFIG.find((item) => item.path === normalizedPath);
+  if (!route) return false;
+  return (route.roles as readonly string[]).includes(normalizedRole);
+}
+
+export function getAllowedTopLevelRoutes(role: AppRole | string | null | undefined) {
+  const normalizedRole = (role || "system_admin") as AppRole;
+  return TOP_LEVEL_ROUTE_CONFIG.filter((route) =>
+    (route.roles as readonly string[]).includes(normalizedRole),
+  );
+}
+
+export function getFirstAllowedTopLevelRoutePath(
+  role: AppRole | string | null | undefined,
+): TopLevelRoutePath {
+  return getAllowedTopLevelRoutes(role)[0]?.path ?? "/";
 }

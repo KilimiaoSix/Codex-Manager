@@ -103,6 +103,18 @@ pub(crate) fn read_request_logs(
     Ok(logs.into_iter().map(to_request_log_summary).collect())
 }
 
+pub(crate) fn read_request_logs_for_key_ids(
+    query: Option<String>,
+    limit: Option<i64>,
+    key_ids: &[String],
+) -> Result<Vec<RequestLogSummary>, String> {
+    let storage = open_storage().ok_or_else(|| "open storage failed".to_string())?;
+    let logs = storage
+        .list_request_logs_for_keys(query.as_deref(), limit.unwrap_or(200), key_ids)
+        .map_err(|err| format!("list request logs failed: {err}"))?;
+    Ok(logs.into_iter().map(to_request_log_summary).collect())
+}
+
 /// 函数 `read_request_log_page`
 ///
 /// 作者: gaohongshun
@@ -136,6 +148,47 @@ pub(crate) fn read_request_log_page(
             end_ts,
             offset,
             page_size,
+        )
+        .map_err(|err| format!("list request logs failed: {err}"))?;
+
+    Ok(RequestLogListResult {
+        items: logs.into_iter().map(to_request_log_summary).collect(),
+        total,
+        page,
+        page_size,
+    })
+}
+
+pub(crate) fn read_request_log_page_for_key_ids(
+    params: RequestLogListParams,
+    key_ids: &[String],
+) -> Result<RequestLogListResult, String> {
+    let params = params.normalized();
+    let storage = open_storage().ok_or_else(|| "open storage failed".to_string())?;
+    let query = normalize_optional_text(params.query);
+    let status_filter = normalize_status_filter(params.status_filter);
+    let (start_ts, end_ts) = normalize_time_range(params.start_ts, params.end_ts);
+    let page_size = normalize_page_size(params.page_size);
+    let total = storage
+        .count_request_logs_for_keys(
+            query.as_deref(),
+            status_filter.as_deref(),
+            start_ts,
+            end_ts,
+            key_ids,
+        )
+        .map_err(|err| format!("count request logs failed: {err}"))?;
+    let page = clamp_page(params.page, total, page_size);
+    let offset = (page - 1) * page_size;
+    let logs = storage
+        .list_request_logs_paginated_for_keys(
+            query.as_deref(),
+            status_filter.as_deref(),
+            start_ts,
+            end_ts,
+            offset,
+            page_size,
+            key_ids,
         )
         .map_err(|err| format!("list request logs failed: {err}"))?;
 

@@ -50,6 +50,7 @@ import {
 import { serviceClient } from "@/lib/api/service-client";
 import { useDesktopPageActive } from "@/hooks/useDesktopPageActive";
 import { useDeferredDesktopActivation } from "@/hooks/useDeferredDesktopActivation";
+import { isAdminRole, useAppSession } from "@/hooks/useAppSession";
 import { useLocalDayRange } from "@/hooks/useLocalDayRange";
 import { usePageTransitionReady } from "@/hooks/usePageTransitionReady";
 import { useI18n } from "@/lib/i18n/provider";
@@ -1296,6 +1297,8 @@ function LogsPageContent() {
   const localDayRange = useLocalDayRange();
   const searchParams = useSearchParams();
   const { serviceStatus } = useAppStore();
+  const { data: session } = useAppSession();
+  const isAdminMode = isAdminRole(session?.role);
   const isPageActive = useDesktopPageActive("/logs/");
   const queryClient = useQueryClient();
   const areLogQueriesEnabled = useDeferredDesktopActivation(serviceStatus.connected);
@@ -1343,7 +1346,7 @@ function LogsPageContent() {
   const { data: accountsResult } = useQuery({
     queryKey: ["accounts", "lookup"],
     queryFn: () => accountClient.list(),
-    enabled: areLogQueriesEnabled && isPageActive,
+    enabled: areLogQueriesEnabled && isPageActive && isAdminMode,
     staleTime: 60_000,
     retry: 1,
     placeholderData: (previousData): AccountListResult | undefined =>
@@ -1371,7 +1374,7 @@ function LogsPageContent() {
   const { data: aggregateApisResult } = useQuery({
     queryKey: ["aggregate-apis", "lookup"],
     queryFn: () => accountClient.listAggregateApis(),
-    enabled: areLogQueriesEnabled && isPageActive,
+    enabled: areLogQueriesEnabled && isPageActive && isAdminMode,
     staleTime: 60_000,
     retry: 1,
   });
@@ -1435,7 +1438,7 @@ function LogsPageContent() {
         pageSize: gatewayPageSizeNumber,
         stageFilter: gatewayStageFilter,
       }),
-    enabled: areLogQueriesEnabled && isPageActive,
+    enabled: areLogQueriesEnabled && isPageActive && isAdminMode,
     refetchInterval: 5000,
     retry: 1,
   });
@@ -1566,6 +1569,12 @@ function LogsPageContent() {
     };
   }, [localDayRange.dayEndTs, localDayRange.dayStartTs, timePreset]);
 
+  useEffect(() => {
+    if (!isAdminMode && activeTab === "gateway-errors") {
+      setActiveTab("requests");
+    }
+  }, [activeTab, isAdminMode]);
+
   const currentFilterLabel =
     filter === "all"
       ? t("全部状态")
@@ -1661,7 +1670,7 @@ function LogsPageContent() {
       <Tabs
         value={activeTab}
         onValueChange={(value) => {
-          if (value === "requests" || value === "gateway-errors") {
+          if (value === "requests" || (isAdminMode && value === "gateway-errors")) {
             setActiveTab(value);
           }
         }}
@@ -1671,9 +1680,11 @@ function LogsPageContent() {
           <TabsTrigger value="requests" className="gap-2 px-5 shrink-0">
             <Database className="h-4 w-4" /> {t("请求日志")}
           </TabsTrigger>
+          {isAdminMode ? (
           <TabsTrigger value="gateway-errors" className="gap-2 px-5 shrink-0">
             <Shield className="h-4 w-4" /> {t("网关错误诊断")}
           </TabsTrigger>
+          ) : null}
         </TabsList>
 
         <TabsContent value="requests" className="space-y-5">
@@ -1721,6 +1732,7 @@ function LogsPageContent() {
                   >
                     <RefreshCw className="mr-1.5 h-4 w-4" /> {t("刷新")}
                   </Button>
+                  {isAdminMode ? (
                   <Button
                     variant="destructive"
                     size="sm"
@@ -1730,6 +1742,7 @@ function LogsPageContent() {
                   >
                     <Trash2 className="mr-1.5 h-4 w-4" /> {t("清空日志")}
                   </Button>
+                  ) : null}
                 </div>
               </div>
 
@@ -2047,6 +2060,7 @@ function LogsPageContent() {
           </div>
         </TabsContent>
 
+        {isAdminMode ? (
         <TabsContent value="gateway-errors" className="space-y-5">
           <Card className="glass-card border-none shadow-md backdrop-blur-md">
             <CardContent className="grid gap-4 pt-0 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
@@ -2380,8 +2394,10 @@ function LogsPageContent() {
             </div>
           </div>
         </TabsContent>
+        ) : null}
       </Tabs>
 
+      {isAdminMode ? (
       <ConfirmDialog
         open={clearConfirmOpen}
         onOpenChange={setClearConfirmOpen}
@@ -2391,6 +2407,8 @@ function LogsPageContent() {
         confirmVariant="destructive"
         onConfirm={() => clearMutation.mutate()}
       />
+      ) : null}
+      {isAdminMode ? (
       <ConfirmDialog
         open={clearGatewayConfirmOpen}
         onOpenChange={setClearGatewayConfirmOpen}
@@ -2400,6 +2418,7 @@ function LogsPageContent() {
         confirmVariant="destructive"
         onConfirm={() => clearGatewayMutation.mutate()}
       />
+      ) : null}
     </div>
   );
 }

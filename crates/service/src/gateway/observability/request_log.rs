@@ -525,6 +525,36 @@ pub(crate) fn write_request_log_with_attempts(
         );
     }
 
+    if success {
+        let raw_usage_json = serde_json::to_string(&serde_json::json!({
+            "model": model,
+            "inputTokens": input_tokens,
+            "cachedInputTokens": cached_input_tokens,
+            "outputTokens": output_tokens,
+            "totalTokens": total_tokens,
+            "reasoningOutputTokens": reasoning_output_tokens,
+            "estimatedCostUsd": estimated_cost_usd,
+        }))
+        .ok();
+        if let Err(err) = crate::wallet_charge_for_request(
+            storage,
+            key_id,
+            request_log_id,
+            estimated_cost_usd,
+            model,
+            effective_service_tier.or(service_tier),
+            raw_usage_json,
+        ) {
+            log::warn!(
+                "event=app_wallet_charge_failed key_id={} request_log_id={} estimated_cost_usd={} err={}",
+                key_id.unwrap_or("-"),
+                request_log_id,
+                estimated_cost_usd,
+                err
+            );
+        }
+    }
+
     if should_write_gateway_error_fallback(status_code, error) {
         crate::gateway::write_gateway_error_log(GatewayErrorLogInput {
             trace_id: trace_context.trace_id,

@@ -278,14 +278,17 @@ pub(super) async fn rpc_proxy(
     if !is_json_content_type(&headers) {
         return (StatusCode::UNSUPPORTED_MEDIA_TYPE, "{}").into_response();
     }
-    let resp = state
+    let mut request = state
         .client
         .post(&state.service_rpc_url)
         .header("content-type", "application/json")
-        .header("x-codexmanager-rpc-token", &state.rpc_token)
-        .body(body)
-        .send()
-        .await;
+        .header("x-codexmanager-rpc-token", &state.rpc_token);
+    if let Some(session) = auth::current_app_session_from_headers(&headers) {
+        request = request
+            .header("x-codexmanager-rpc-actor-role", session.user.role)
+            .header("x-codexmanager-rpc-actor-user-id", session.user.id);
+    }
+    let resp = request.body(body).send().await;
     let resp = match resp {
         Ok(v) => v,
         Err(err) => {

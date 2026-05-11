@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Settings as SettingsIcon } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { useAppStore } from "@/lib/store/useAppStore";
 import { Switch } from "@/components/ui/switch";
@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DisclaimerTicker } from "@/components/layout/disclaimer-ticker";
 import { LanguageSwitcher } from "@/components/layout/language-switcher";
-import { WebPasswordModal } from "../modals/web-password-modal";
 import { serviceClient } from "@/lib/api/service-client";
 import { appClient } from "@/lib/api/app-client";
 import { useRuntimeCapabilities } from "@/hooks/useRuntimeCapabilities";
@@ -38,12 +37,17 @@ const DEFAULT_SERVICE_ADDR = "localhost:48760";
  * 返回函数执行结果
  */
 export function Header() {
-  const { serviceStatus, setServiceStatus, setAppSettings, currentShellPath } = useAppStore();
+  const {
+    appSettings,
+    serviceStatus,
+    setServiceStatus,
+    setAppSettings,
+    currentShellPath,
+  } = useAppStore();
   const { t } = useI18n();
-  const [webPasswordModalOpen, setWebPasswordModalOpen] = useState(false);
   const [isToggling, setIsToggling] = useState(false);
   const [portInput, setPortInput] = useState("48760");
-  const { canManageService } = useRuntimeCapabilities();
+  const { canManageService, mode } = useRuntimeCapabilities();
 
   useEffect(() => {
     const current = String(serviceStatus.addr || DEFAULT_SERVICE_ADDR);
@@ -71,6 +75,10 @@ export function Header() {
 
       return t(getTopLevelRouteLabel(currentShellPath));
   };
+
+  const canLogoutWebSession =
+    mode === "web-gateway" &&
+    (appSettings.webAuthMode !== "none" || !serviceStatus.connected);
 
   /**
    * 函数 `persistServiceAddr`
@@ -156,6 +164,11 @@ export function Header() {
     }
   };
 
+  const handleLogout = () => {
+    if (typeof window === "undefined") return;
+    window.location.assign("/__logout");
+  };
+
   return (
     <>
       <header className="sticky top-0 z-30 grid h-16 grid-cols-[minmax(0,auto)_minmax(0,1fr)_auto] items-center gap-3 glass-header px-4 xl:px-6">
@@ -202,22 +215,21 @@ export function Header() {
             </div>
           ) : null}
 
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9 gap-2 px-2.5 xl:px-3"
-            onClick={() => setWebPasswordModalOpen(true)}
-          >
-            <SettingsIcon className="h-3.5 w-3.5" />
-            <span className="text-xs">{t("密码")}</span>
-          </Button>
+          {canLogoutWebSession ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 gap-2 rounded-xl px-2.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive xl:px-3"
+              onClick={handleLogout}
+              title={t("退出登录")}
+              aria-label={t("退出登录")}
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              <span className="hidden text-xs sm:inline">{t("退出登录")}</span>
+            </Button>
+          ) : null}
         </div>
       </header>
-
-      <WebPasswordModal
-        open={webPasswordModalOpen}
-        onOpenChange={setWebPasswordModalOpen}
-      />
     </>
   );
 }

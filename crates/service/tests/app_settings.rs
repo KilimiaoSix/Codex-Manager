@@ -207,6 +207,60 @@ fn read_env_overrides_map(db_path: &PathBuf) -> serde_json::Map<String, serde_js
     serde_json::from_str(&raw).expect("parse env overrides json")
 }
 
+#[test]
+fn app_settings_roundtrip_account_manager_mode_and_bootstrap() {
+    with_temp_db(|_| {
+        let snapshot = codexmanager_service::app_settings_set(Some(&json!({
+            "webAuthMode": "accounts",
+            "distributionEnabled": true
+        })))
+        .expect("save settings");
+        assert_eq!(snapshot["webAuthMode"], "accounts");
+        assert_eq!(snapshot["distributionEnabled"], true);
+        assert_eq!(snapshot["appUsersConfigured"], false);
+
+        let login = codexmanager_service::bootstrap_app_admin(
+            "admin-user",
+            "password123",
+            Some("Admin User"),
+        )
+        .expect("bootstrap admin");
+        assert!(login.token.starts_with("cms_"));
+        assert_eq!(login.user.username, "admin-user");
+        assert_eq!(login.user.role, "admin");
+        assert!(login.user.wallet.is_none());
+
+        let resolved = codexmanager_service::resolve_app_user_session(&login.token)
+            .expect("resolve session")
+            .expect("active session");
+        assert_eq!(resolved.user.id, login.user.id);
+
+        let status = codexmanager_service::app_auth_status_value().expect("auth status");
+        assert_eq!(status["mode"], "accounts");
+        assert_eq!(status["distributionEnabled"], true);
+        assert_eq!(status["appUsersConfigured"], true);
+        assert_eq!(status["appUserCount"], 1);
+    });
+}
+
+#[test]
+fn app_settings_rejects_password_mode_without_password() {
+    with_temp_db(|_| {
+        let result = codexmanager_service::app_settings_set(Some(&json!({
+            "webAuthMode": "password"
+        })));
+        assert!(result.is_err());
+
+        let snapshot = codexmanager_service::app_settings_set(Some(&json!({
+            "webAccessPassword": "password123",
+            "webAuthMode": "password"
+        })))
+        .expect("save password mode");
+        assert_eq!(snapshot["webAuthMode"], "password");
+        assert_eq!(snapshot["webAccessPasswordConfigured"], true);
+    });
+}
+
 /// 函数 `sync_runtime_settings_from_storage_preserves_process_env_when_override_not_persisted`
 ///
 /// 作者: gaohongshun

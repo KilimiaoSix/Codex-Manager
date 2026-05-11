@@ -1,19 +1,31 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BadgeDollarSign,
   Boxes,
   CircleDollarSign,
   KeyRound,
+  Percent,
   RefreshCw,
+  Save,
+  Trash2,
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -33,6 +45,7 @@ import { useAppStore } from "@/lib/store/useAppStore";
 import { cn } from "@/lib/utils";
 import { formatCompactNumber, formatTsFromSeconds } from "@/lib/utils/usage";
 import type {
+  BillingRule,
   QuotaApiKeyUsageItem,
   QuotaModelUsageItem,
   QuotaOverviewResult,
@@ -77,7 +90,12 @@ function metricValue(source: QuotaSourceSummary) {
 
 function statusBadge(status: string, priceStatus?: string) {
   const normalized = (priceStatus || status || "unknown").toLowerCase();
-  if (normalized === "ok" || normalized === "success" || normalized === "enabled") {
+  if (
+    normalized === "ok" ||
+    normalized === "success" ||
+    normalized === "enabled" ||
+    normalized === "active"
+  ) {
     return <Badge className="border-green-500/20 bg-green-500/10 text-green-600">OK</Badge>;
   }
   if (normalized === "missing" || normalized === "unknown") {
@@ -87,6 +105,11 @@ function statusBadge(status: string, priceStatus?: string) {
     return <Badge className="border-amber-500/20 bg-amber-500/10 text-amber-600">注意</Badge>;
   }
   return <Badge className="border-red-500/20 bg-red-500/10 text-red-600">异常</Badge>;
+}
+
+function formatMultiplier(multiplierMillis: number) {
+  if (!Number.isFinite(multiplierMillis)) return "1.000x";
+  return `${(multiplierMillis / 1000).toFixed(3)}x`;
 }
 
 function OverviewCard({
@@ -317,6 +340,206 @@ function ApiKeyUsageTable({ items }: { items: QuotaApiKeyUsageItem[] }) {
   );
 }
 
+function BillingRulesPanel({
+  items,
+  loading,
+  saving,
+  deletingId,
+  onCreate,
+  onDelete,
+}: {
+  items: BillingRule[];
+  loading: boolean;
+  saving: boolean;
+  deletingId: string | null;
+  onCreate: (params: {
+    name: string;
+    multiplier: string;
+    priority: string;
+    status: string;
+    modelPattern: string;
+    serviceTier: string;
+    userId: string;
+    apiKeyId: string;
+  }) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [draft, setDraft] = useState({
+    name: "",
+    multiplier: "1",
+    priority: "0",
+    status: "active",
+    modelPattern: "",
+    serviceTier: "",
+    userId: "",
+    apiKeyId: "",
+  });
+
+  const updateDraft = (key: keyof typeof draft, value: string) => {
+    setDraft((current) => ({ ...current, [key]: value }));
+  };
+
+  const submit = () => {
+    onCreate(draft);
+  };
+
+  return (
+    <div className="grid gap-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-2">
+          <Label htmlFor="billing-rule-name">规则名称</Label>
+          <Input
+            id="billing-rule-name"
+            value={draft.name}
+            onChange={(event) => updateDraft("name", event.target.value)}
+            placeholder="例如：成员标准价"
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="billing-rule-multiplier">扣费倍率</Label>
+          <Input
+            id="billing-rule-multiplier"
+            inputMode="decimal"
+            value={draft.multiplier}
+            onChange={(event) => updateDraft("multiplier", event.target.value)}
+            placeholder="1.2"
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="billing-rule-model">模型匹配</Label>
+          <Input
+            id="billing-rule-model"
+            value={draft.modelPattern}
+            onChange={(event) => updateDraft("modelPattern", event.target.value)}
+            placeholder="gpt-5 或 claude-*"
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="billing-rule-status">状态</Label>
+          <Select
+            value={draft.status}
+            onValueChange={(value) => updateDraft("status", value || "active")}
+          >
+            <SelectTrigger id="billing-rule-status" className="w-full">
+              <SelectValue>
+                {(value) => (String(value || "active") === "disabled" ? "停用" : "启用")}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent align="start">
+              <SelectItem value="active">启用</SelectItem>
+              <SelectItem value="disabled">停用</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="billing-rule-tier">服务层</Label>
+          <Input
+            id="billing-rule-tier"
+            value={draft.serviceTier}
+            onChange={(event) => updateDraft("serviceTier", event.target.value)}
+            placeholder="default / priority"
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="billing-rule-user">用户 ID</Label>
+          <Input
+            id="billing-rule-user"
+            value={draft.userId}
+            onChange={(event) => updateDraft("userId", event.target.value)}
+            placeholder="留空表示所有用户"
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="billing-rule-key">API Key ID</Label>
+          <Input
+            id="billing-rule-key"
+            value={draft.apiKeyId}
+            onChange={(event) => updateDraft("apiKeyId", event.target.value)}
+            placeholder="留空表示所有 Key"
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="billing-rule-priority">优先级</Label>
+          <div className="flex gap-2">
+            <Input
+              id="billing-rule-priority"
+              inputMode="numeric"
+              value={draft.priority}
+              onChange={(event) => updateDraft("priority", event.target.value)}
+              placeholder="0"
+            />
+            <Button className="shrink-0 gap-2" disabled={saving} onClick={submit}>
+              <Save className="h-4 w-4" />
+              保存
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <Skeleton className="h-72 rounded-lg" />
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>规则</TableHead>
+              <TableHead>匹配范围</TableHead>
+              <TableHead className="text-right">倍率</TableHead>
+              <TableHead className="text-right">优先级</TableHead>
+              <TableHead>更新时间</TableHead>
+              <TableHead className="text-right">操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {items.length ? (
+              items.map((item) => (
+                <TableRow key={item.id}>
+                  <TableCell>
+                    <div className="font-medium">{item.name}</div>
+                    <div className="font-mono text-[10px] text-muted-foreground">{item.id}</div>
+                  </TableCell>
+                  <TableCell className="text-xs">
+                    <div>模型：{item.modelPattern || "全部"}</div>
+                    <div className="text-muted-foreground">
+                      层级：{item.serviceTier || "全部"} / 用户：{item.userId || "全部"} / Key：
+                      {item.apiKeyId || "全部"}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right font-mono">
+                    {formatMultiplier(item.multiplierMillis)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono">{item.priority}</TableCell>
+                  <TableCell>{formatTsFromSeconds(item.updatedAt, "-")}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      {statusBadge(item.status)}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        disabled={deletingId === item.id}
+                        onClick={() => onDelete(item.id)}
+                        aria-label="删除计费规则"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
+                  暂无自定义计费规则，默认按官方模型价格 1.000x 扣费
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      )}
+    </div>
+  );
+}
+
 export default function QuotaPage() {
   const { t } = useI18n();
   const serviceAddr = useAppStore((state) => state.serviceStatus.addr);
@@ -346,6 +569,11 @@ export default function QuotaPage() {
     queryFn: () => quotaClient.apiKeyUsage(),
     enabled,
   });
+  const billingRulesQuery = useQuery({
+    queryKey: ["quota-billing-rules", serviceAddr || null],
+    queryFn: () => quotaClient.billingRules(),
+    enabled,
+  });
 
   const refreshMutation = useMutation({
     mutationFn: () => quotaClient.refreshSources({ kinds: ["aggregate_api", "openai_account"] }),
@@ -364,6 +592,53 @@ export default function QuotaPage() {
       toast.error(`刷新额度失败: ${error instanceof Error ? error.message : String(error)}`);
     },
   });
+  const upsertBillingRuleMutation = useMutation({
+    mutationFn: (draft: {
+      name: string;
+      multiplier: string;
+      priority: string;
+      status: string;
+      modelPattern: string;
+      serviceTier: string;
+      userId: string;
+      apiKeyId: string;
+    }) => {
+      const multiplier = Number(draft.multiplier);
+      if (!draft.name.trim()) {
+        throw new Error("计费规则名称不能为空");
+      }
+      if (!Number.isFinite(multiplier) || multiplier < 0 || multiplier > 100) {
+        throw new Error("扣费倍率必须在 0 到 100 之间");
+      }
+      return quotaClient.upsertBillingRule({
+        name: draft.name.trim(),
+        status: draft.status,
+        priority: Number.isFinite(Number(draft.priority)) ? Number(draft.priority) : 0,
+        multiplierMillis: Math.round(multiplier * 1000),
+        modelPattern: draft.modelPattern.trim() || null,
+        serviceTier: draft.serviceTier.trim() || null,
+        userId: draft.userId.trim() || null,
+        apiKeyId: draft.apiKeyId.trim() || null,
+      });
+    },
+    onSuccess: () => {
+      toast.success("计费规则已保存");
+      void queryClient.invalidateQueries({ queryKey: ["quota-billing-rules"] });
+    },
+    onError: (error) => {
+      toast.error(`保存计费规则失败: ${error instanceof Error ? error.message : String(error)}`);
+    },
+  });
+  const deleteBillingRuleMutation = useMutation({
+    mutationFn: (id: string) => quotaClient.deleteBillingRule(id),
+    onSuccess: () => {
+      toast.success("计费规则已删除");
+      void queryClient.invalidateQueries({ queryKey: ["quota-billing-rules"] });
+    },
+    onError: (error) => {
+      toast.error(`删除计费规则失败: ${error instanceof Error ? error.message : String(error)}`);
+    },
+  });
 
   const modelItems = useMemo(
     () => [...(modelUsageQuery.data || [])].sort((a, b) => b.totalTokens - a.totalTokens),
@@ -371,6 +646,7 @@ export default function QuotaPage() {
   );
   const sourceItems = sourceQuery.data || [];
   const apiKeyItems = apiKeyUsageQuery.data || [];
+  const billingRuleItems = billingRulesQuery.data || [];
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
@@ -411,6 +687,10 @@ export default function QuotaPage() {
                 <KeyRound className="h-4 w-4" />
                 API Key
               </TabsTrigger>
+              <TabsTrigger value="billing">
+                <Percent className="h-4 w-4" />
+                计费规则
+              </TabsTrigger>
             </TabsList>
             <TabsContent value="models">
               <Card className="glass-card border-none shadow-md">
@@ -442,6 +722,23 @@ export default function QuotaPage() {
                   ) : (
                     <ApiKeyUsageTable items={apiKeyItems} />
                   )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+            <TabsContent value="billing">
+              <Card className="glass-card border-none shadow-md">
+                <CardHeader>
+                  <CardTitle className="text-base">扣费倍率规则</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <BillingRulesPanel
+                    items={billingRuleItems}
+                    loading={billingRulesQuery.isPending}
+                    saving={upsertBillingRuleMutation.isPending}
+                    deletingId={deleteBillingRuleMutation.variables ?? null}
+                    onCreate={(draft) => upsertBillingRuleMutation.mutate(draft)}
+                    onDelete={(id) => deleteBillingRuleMutation.mutate(id)}
+                  />
                 </CardContent>
               </Card>
             </TabsContent>

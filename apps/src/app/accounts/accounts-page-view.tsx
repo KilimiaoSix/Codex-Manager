@@ -481,7 +481,7 @@ export function AccountsPageView(props: AccountsPageViewProps) {
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
                   <DropdownMenuLabel className="px-2 py-1 text-[11px] uppercase tracking-[0.16em] text-muted-foreground/80">
-                    {t("账号管理")}
+                    {t("号池管理")}
                   </DropdownMenuLabel>
                   <DropdownMenuItem
                     className="h-9 rounded-lg px-2"

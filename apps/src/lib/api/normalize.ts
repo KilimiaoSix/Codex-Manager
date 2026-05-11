@@ -1639,6 +1639,13 @@ export function normalizeAppSettings(payload: unknown): AppSettings {
       source.webAccessPasswordConfigured,
       false
     ),
+    webAuthMode: asString(source.webAuthMode) || "none",
+    webAuthModeOptions: asArray(source.webAuthModeOptions)
+      .map((item) => asString(item))
+      .filter(Boolean),
+    distributionEnabled: asBoolean(source.distributionEnabled, false),
+    appUsersConfigured: asBoolean(source.appUsersConfigured, false),
+    appUserCount: asInteger(source.appUserCount, 0, 0),
     locale: asString(source.locale) || "zh-CN",
     localeOptions: asArray(source.localeOptions).map((item) => asString(item)).filter(Boolean),
     serviceAddr: asString(source.serviceAddr) || "localhost:48760",

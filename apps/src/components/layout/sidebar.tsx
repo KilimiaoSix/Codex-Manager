@@ -3,8 +3,10 @@
 import { 
   LayoutDashboard, 
   Users, 
+  UserCog,
   Key, 
   Boxes,
+  Percent,
   Database,
   Puzzle,
   FileText, 
@@ -19,6 +21,11 @@ import { Button } from "@/components/ui/button";
 import { useAppStore } from "@/lib/store/useAppStore";
 import { useI18n } from "@/lib/i18n/provider";
 import {
+  getAllowedTopLevelRoutes,
+  type TopLevelRoutePath,
+} from "@/lib/app-shell/top-level-routes";
+import { useAppSession } from "@/hooks/useAppSession";
+import {
   memo,
   useCallback,
   useMemo,
@@ -27,15 +34,21 @@ import {
 
 const NAV_ITEMS = [
   { label: "仪表盘", href: "/", icon: LayoutDashboard },
-  { label: "账号管理", href: "/accounts", icon: Users },
+  { label: "号池管理", href: "/accounts", icon: Users },
+  { label: "账号管理", href: "/account-manager", icon: UserCog },
   { label: "聚合API", href: "/aggregate-api", icon: Database },
   { label: "平台密钥", href: "/apikeys", icon: Key },
+  { label: "额度中心", href: "/quota", icon: Percent },
   { label: "模型管理", href: "/models", icon: Boxes },
   { label: "插件中心", href: "/plugins", icon: Puzzle },
   { label: "请求日志", href: "/logs", icon: FileText },
   { label: "设置", href: "/settings", icon: Settings },
   { label: "赞助与推荐", href: "/author", icon: UserRound },
 ];
+
+const NAV_ITEM_BY_PATH = new Map(
+  NAV_ITEMS.map((item) => [item.href, item] as const),
+);
 
 const NavItem = memo(({
   item,
@@ -88,6 +101,8 @@ export function Sidebar() {
     currentShellPath,
     navigateShellPath,
   } = useAppStore();
+  const { data: session } = useAppSession();
+  const role = session?.role ?? "member";
 
   const handleNavigate = useCallback(
     (href: string, event: MouseEvent<HTMLAnchorElement>) => {
@@ -113,19 +128,25 @@ export function Sidebar() {
     [currentShellPath, navigateShellPath],
   );
 
-  const renderedItems = useMemo(() => 
-    NAV_ITEMS.map((item) => (
-      <NavItem 
-        key={item.href} 
-        item={item} 
-        itemName={t(item.label)}
-        isActive={item.href === currentShellPath} 
-        isSidebarOpen={isSidebarOpen}
-        onNavigate={handleNavigate}
-      />
-    )),
-    [currentShellPath, handleNavigate, isSidebarOpen, t]
-  );
+  const renderedItems = useMemo(() => {
+    const allowedRoutes = getAllowedTopLevelRoutes(role);
+    return allowedRoutes
+      .map((route) => {
+        const item = NAV_ITEM_BY_PATH.get(route.path);
+        if (!item) return null;
+        return (
+          <NavItem
+            key={item.href}
+            item={item}
+            itemName={t(item.label)}
+            isActive={(item.href as TopLevelRoutePath) === currentShellPath}
+            isSidebarOpen={isSidebarOpen}
+            onNavigate={handleNavigate}
+          />
+        );
+      })
+      .filter(Boolean);
+  }, [currentShellPath, handleNavigate, isSidebarOpen, role, t]);
 
   return (
     <div

@@ -14,6 +14,7 @@ import { useAppStore } from "@/lib/store/useAppStore";
 import { DEFAULT_CODEX_ORIGINATOR } from "@/lib/constants/codex";
 import { useDesktopPageActive } from "@/hooks/useDesktopPageActive";
 import { useDeferredDesktopActivation } from "@/hooks/useDeferredDesktopActivation";
+import { APP_SESSION_QUERY_KEY, useAppSession } from "@/hooks/useAppSession";
 import { usePageTransitionReady } from "@/hooks/usePageTransitionReady";
 import { useRuntimeCapabilities } from "@/hooks/useRuntimeCapabilities";
 import {
@@ -66,10 +67,14 @@ import {
   Save,
   Search,
   Settings as SettingsIcon,
+  ShieldCheck,
   Variable,
+  UserRound,
+  LockKeyhole,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/modals/confirm-dialog";
+import { WebPasswordModal } from "@/components/modals/web-password-modal";
 import { useI18n } from "@/lib/i18n/provider";
 import {
   CUSTOM_WORKER_MODE_VALUE,
@@ -103,7 +108,167 @@ import {
   type WorkerPreset,
 } from "@/app/settings/settings-page-helpers";
 
-export default function SettingsPage() {
+function MemberSettingsPage() {
+  const { t } = useI18n();
+  const { theme, setTheme } = useTheme();
+  const queryClient = useQueryClient();
+  const { data: session } = useAppSession();
+  const [displayName, setDisplayName] = useState(
+    session?.currentUser?.displayName || "",
+  );
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+
+  useEffect(() => {
+    setDisplayName(session?.currentUser?.displayName || "");
+  }, [session?.currentUser?.displayName]);
+
+  const updateProfile = useMutation({
+    mutationFn: () =>
+      appClient.updateProfile({
+        displayName: displayName.trim() || null,
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: APP_SESSION_QUERY_KEY });
+      toast.success(t("个人资料已更新"));
+    },
+    onError: (error: unknown) => {
+      toast.error(error instanceof Error ? error.message : String(error));
+    },
+  });
+
+  const changePassword = useMutation({
+    mutationFn: () =>
+      appClient.changePassword({
+        currentPassword,
+        newPassword,
+      }),
+    onSuccess: () => {
+      setCurrentPassword("");
+      setNewPassword("");
+      toast.success(t("密码已更新"));
+    },
+    onError: (error: unknown) => {
+      toast.error(error instanceof Error ? error.message : String(error));
+    },
+  });
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-bold tracking-tight">{t("个人设置")}</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {t("管理你的账号资料、登录密码和界面偏好")}
+        </p>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="glass-card border-none shadow-md">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <UserRound className="h-4 w-4 text-primary" />
+              <CardTitle className="text-base">{t("账号资料")}</CardTitle>
+            </div>
+            <CardDescription>
+              {session?.currentUser?.username || t("当前登录账号")}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-2">
+              <Label>{t("显示名称")}</Label>
+              <Input
+                value={displayName}
+                onChange={(event) => setDisplayName(event.target.value)}
+                placeholder={t("可选")}
+              />
+            </div>
+            <Button
+              className="gap-2"
+              onClick={() => updateProfile.mutate()}
+              disabled={updateProfile.isPending}
+            >
+              <Save className="h-4 w-4" />
+              {updateProfile.isPending ? t("保存中...") : t("保存资料")}
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="glass-card border-none shadow-md">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <LockKeyhole className="h-4 w-4 text-primary" />
+              <CardTitle className="text-base">{t("登录密码")}</CardTitle>
+            </div>
+            <CardDescription>{t("修改当前账号的登录密码")}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-2">
+              <Label>{t("当前密码")}</Label>
+              <Input
+                type="password"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>{t("新密码")}</Label>
+              <Input
+                type="password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+              />
+            </div>
+            <Button
+              className="gap-2"
+              onClick={() => changePassword.mutate()}
+              disabled={
+                changePassword.isPending ||
+                !currentPassword.trim() ||
+                !newPassword.trim()
+              }
+            >
+              <LockKeyhole className="h-4 w-4" />
+              {changePassword.isPending ? t("保存中...") : t("修改密码")}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="glass-card border-none shadow-md">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Palette className="h-4 w-4 text-primary" />
+            <CardTitle className="text-base">{t("界面偏好")}</CardTitle>
+          </div>
+          <CardDescription>{t("这些偏好只影响当前浏览器会话")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {THEMES.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setTheme(item.id)}
+                className={cn(
+                  "flex items-center gap-3 rounded-2xl border border-border/60 bg-background/45 p-3 text-left transition-colors hover:bg-accent/50",
+                  theme === item.id ? "ring-2 ring-primary/40" : "",
+                )}
+              >
+                <span
+                  className="h-5 w-5 rounded-full border border-border/50"
+                  style={{ backgroundColor: item.color }}
+                />
+                <span className="text-sm font-medium">{t(item.name)}</span>
+              </button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function AdminSettingsPage() {
   const { t } = useI18n();
   const setStoreSettings = useAppStore((state) => state.setAppSettings);
   const storedSettings = useAppStore((state) => state.appSettings);
@@ -162,6 +327,7 @@ export default function SettingsPage() {
   >({});
   const [workerAdvancedDialogOpen, setWorkerAdvancedDialogOpen] =
     useState(false);
+  const [webPasswordModalOpen, setWebPasswordModalOpen] = useState(false);
   const { data: workerRecommendation } = useQuery({
     queryKey: ["gateway-concurrency-recommendation"],
     queryFn: async () =>
@@ -598,6 +764,12 @@ export default function SettingsPage() {
       ? t("已按当前机器资源自动推荐，适合作为这台机器的默认档位。")
       : t(activeWorkerPreset.summary)
     : t("当前配置来自高级参数，可在高级参数中继续微调。");
+  const webAuthModeLabel =
+    snapshot.webAuthMode === "accounts"
+      ? "账号系统"
+      : snapshot.webAuthMode === "password"
+        ? "访问密码"
+        : "公开访问";
 
   const lastIntentThemeRef = useRef<string | null>(null);
   const lastIntentAppearancePresetRef = useRef<string | null>(null);
@@ -1229,6 +1401,42 @@ export default function SettingsPage() {
                   "后，局域网设备可通过当前机器 IP 访问；设置保存后需要重启相关进程才会生效，Web 监听地址会默认跟随这里的模式。",
                 )}
               </p>
+            </CardContent>
+          </Card>
+
+          <Card className="glass-card border-none shadow-md">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-primary" />
+                <CardTitle className="text-base">{t("访问控制")}</CardTitle>
+              </div>
+              <CardDescription>
+                {t("统一管理 Web 登录方式、访问密码和团队额度分发。")}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col gap-3 rounded-2xl border border-border/50 bg-background/45 p-4 md:flex-row md:items-center md:justify-between">
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Label>{t("当前访问方式")}</Label>
+                    <Badge variant="secondary">{t(webAuthModeLabel)}</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {snapshot.distributionEnabled
+                      ? t("额度分发已开启，平台 Key 会按归属钱包扣减额度。")
+                      : t("额度分发未开启，平台 Key 不会扣减成员钱包额度。")}
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  className="gap-2 self-start md:self-auto"
+                  disabled={!canAccessManagementRpc}
+                  onClick={() => setWebPasswordModalOpen(true)}
+                >
+                  <ShieldCheck className="h-4 w-4" />
+                  {t("访问控制")}
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
@@ -2212,6 +2420,11 @@ export default function SettingsPage() {
         </DialogContent>
       </Dialog>
 
+      <WebPasswordModal
+        open={webPasswordModalOpen}
+        onOpenChange={setWebPasswordModalOpen}
+      />
+
       <ConfirmDialog
         open={resetAllEnvDialogOpen}
         onOpenChange={setResetAllEnvDialogOpen}
@@ -2223,4 +2436,20 @@ export default function SettingsPage() {
       />
     </div>
   );
+}
+
+export default function SettingsPage() {
+  const { data: session, isLoading } = useAppSession();
+  const { t } = useI18n();
+  if (isLoading || !session) {
+    return (
+      <div className="flex h-64 items-center justify-center text-muted-foreground">
+        {t("加载配置中...")}
+      </div>
+    );
+  }
+  if (session?.role === "member") {
+    return <MemberSettingsPage />;
+  }
+  return <AdminSettingsPage />;
 }
