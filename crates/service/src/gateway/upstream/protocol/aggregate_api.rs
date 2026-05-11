@@ -12,7 +12,7 @@ use crate::aggregate_api::{
     AGGREGATE_API_PROVIDER_CODEX, AGGREGATE_API_PROVIDER_GEMINI,
 };
 use crate::gateway::request_log::RequestLogUsage;
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 const AGGREGATE_API_RETRY_ATTEMPTS_PER_CHANNEL: usize = 3;
 
@@ -137,6 +137,170 @@ fn rewrite_body_model_override(body: &Bytes, model_override: Option<&str>) -> By
     serde_json::to_vec(&value)
         .map(Bytes::from)
         .unwrap_or_else(|_| body.clone())
+}
+
+fn is_responses_request_path(path: &str) -> bool {
+    let normalized = path.split('?').next().unwrap_or(path);
+    matches!(normalized, "/v1/responses" | "/v1/responses/compact")
+}
+
+fn dynamic_tool_to_function_tool(tool_obj: &Map<String, Value>) -> Option<Value> {
+    let name = tool_obj
+        .get("name")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?;
+    let mut mapped = Map::new();
+    mapped.insert("type".to_string(), Value::String("function".to_string()));
+    mapped.insert("name".to_string(), Value::String(name.to_string()));
+    mapped.insert(
+        "description".to_string(),
+        tool_obj
+            .get("description")
+            .cloned()
+            .unwrap_or_else(|| Value::String(String::new())),
+    );
+    mapped.insert(
+        "parameters".to_string(),
+        tool_obj
+            .get("input_schema")
+            .or_else(|| tool_obj.get("inputSchema"))
+            .or_else(|| tool_obj.get("parameters"))
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({ "type": "object", "properties": {} })),
+    );
+    mapped.insert("strict".to_string(), Value::Bool(false));
+    if let Some(defer_loading) = tool_obj
+        .get("defer_loading")
+        .or_else(|| tool_obj.get("deferLoading"))
+    {
+        mapped.insert("defer_loading".to_string(), defer_loading.clone());
+    }
+    Some(Value::Object(mapped))
+}
+
+fn take_dynamic_tool_entries(obj: &mut Map<String, Value>) -> Vec<(Option<String>, Value)> {
+    let mut entries = Vec::new();
+    for key in ["dynamic_tools", "dynamicTools"] {
+        let Some(dynamic_tools) = obj.remove(key) else {
+            continue;
+        };
+        let Some(items) = dynamic_tools.as_array() else {
+            continue;
+        };
+        for item in items {
+            let Some(tool_obj) = item.as_object() else {
+                continue;
+            };
+            let Some(function_tool) = dynamic_tool_to_function_tool(tool_obj) else {
+                continue;
+            };
+            let namespace = tool_obj
+                .get("namespace")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string);
+            entries.push((namespace, function_tool));
+        }
+    }
+    entries
+}
+
+fn ensure_namespace_tools_array(tool: &mut Value) -> bool {
+    let Some(tool_obj) = tool.as_object_mut() else {
+        return false;
+    };
+    if tool_obj.get("type").and_then(Value::as_str) != Some("namespace") {
+        return false;
+    }
+    match tool_obj.get("tools") {
+        Some(Value::Array(_)) => false,
+        _ => {
+            tool_obj.insert("tools".to_string(), Value::Array(Vec::new()));
+            true
+        }
+    }
+}
+
+fn append_function_to_namespace(tools: &mut Vec<Value>, namespace: &str, function_tool: Value) {
+    for tool in tools.iter_mut() {
+        let Some(tool_obj) = tool.as_object_mut() else {
+            continue;
+        };
+        if tool_obj.get("type").and_then(Value::as_str) != Some("namespace")
+            || tool_obj.get("name").and_then(Value::as_str) != Some(namespace)
+        {
+            continue;
+        }
+        let namespace_tools = tool_obj
+            .entry("tools".to_string())
+            .or_insert_with(|| Value::Array(Vec::new()));
+        if !namespace_tools.is_array() {
+            *namespace_tools = Value::Array(Vec::new());
+        }
+        if let Some(namespace_tools) = namespace_tools.as_array_mut() {
+            namespace_tools.push(function_tool);
+        }
+        return;
+    }
+    tools.push(serde_json::json!({
+        "type": "namespace",
+        "name": namespace,
+        "description": format!("Tools in the {namespace} namespace."),
+        "tools": [function_tool]
+    }));
+}
+
+fn normalize_aggregate_responses_tools(path: &str, body: &Bytes) -> Bytes {
+    if !is_responses_request_path(path) {
+        return body.clone();
+    }
+    let Ok(mut value) = serde_json::from_slice::<Value>(body.as_ref()) else {
+        return body.clone();
+    };
+    let Some(obj) = value.as_object_mut() else {
+        return body.clone();
+    };
+
+    let dynamic_entries = take_dynamic_tool_entries(obj);
+    let mut changed = !dynamic_entries.is_empty();
+    let tools = obj
+        .entry("tools".to_string())
+        .or_insert_with(|| Value::Array(Vec::new()));
+    if !tools.is_array() {
+        *tools = Value::Array(Vec::new());
+        changed = true;
+    }
+    let Some(tools_array) = tools.as_array_mut() else {
+        return body.clone();
+    };
+
+    for tool in tools_array.iter_mut() {
+        if ensure_namespace_tools_array(tool) {
+            changed = true;
+        }
+    }
+    for (namespace, function_tool) in dynamic_entries {
+        if let Some(namespace) = namespace {
+            append_function_to_namespace(tools_array, namespace.as_str(), function_tool);
+        } else {
+            tools_array.push(function_tool);
+        }
+    }
+
+    if changed {
+        serde_json::to_vec(&value)
+            .map(Bytes::from)
+            .unwrap_or_else(|_| body.clone())
+    } else {
+        body.clone()
+    }
+}
+
+fn rewrite_aggregate_request_body(path: &str, body: &Bytes, model_override: Option<&str>) -> Bytes {
+    let body = rewrite_body_model_override(body, model_override);
+    normalize_aggregate_responses_tools(path, &body)
 }
 
 fn replace_query_param(mut url: reqwest::Url, name: &str, value: &str) -> reqwest::Url {
@@ -889,12 +1053,14 @@ pub(in super::super) fn proxy_aggregate_request(
                 _ => {}
             }
 
+            let request_body =
+                rewrite_aggregate_request_body(path, body, candidate.model_override.as_deref());
             let builder = build_aggregate_api_request(
                 &client,
                 request.as_ref().expect("request should still be available"),
                 method,
                 url.clone(),
-                &rewrite_body_model_override(body, candidate.model_override.as_deref()),
+                &request_body,
                 secret.as_str(),
                 &auth_config,
                 &injected_headers,
@@ -1311,7 +1477,8 @@ mod tests {
 
     use super::{
         build_upstream_url, effective_action_path, resolve_aggregate_api_rotation_candidates,
-        resolve_passthrough_sse_protocol, rewrite_body_model_override,
+        resolve_passthrough_sse_protocol, rewrite_aggregate_request_body,
+        rewrite_body_model_override,
     };
     use crate::aggregate_api::{
         AGGREGATE_API_AUTH_APIKEY, AGGREGATE_API_PROVIDER_CLAUDE, AGGREGATE_API_PROVIDER_CODEX,
@@ -1391,6 +1558,43 @@ mod tests {
             serde_json::from_slice(rewritten.as_ref()).expect("parse rewritten body");
         assert_eq!(value["model"], "qwen3.5-plus");
         assert_eq!(value["messages"].as_array().map(Vec::len), Some(0));
+    }
+
+    #[test]
+    fn aggregate_responses_body_fills_missing_namespace_tools() {
+        let body = Bytes::from_static(
+            br#"{"model":"gpt-5.4","input":"hi","tools":[{"type":"namespace","name":"workspace","description":"Workspace tools"}]}"#,
+        );
+
+        let rewritten = rewrite_aggregate_request_body("/v1/responses", &body, None);
+
+        let value: serde_json::Value =
+            serde_json::from_slice(rewritten.as_ref()).expect("parse rewritten body");
+        let namespace_tools = value["tools"][0]["tools"]
+            .as_array()
+            .expect("namespace tools array");
+        assert!(namespace_tools.is_empty());
+    }
+
+    #[test]
+    fn aggregate_responses_body_merges_dynamic_tools_into_namespaces() {
+        let body = Bytes::from_static(
+            br#"{"model":"gpt-5.4","input":"hi","tools":[{"type":"namespace","name":"workspace","description":"Workspace tools"}],"dynamicTools":[{"namespace":"workspace","name":"read_file","description":"Read a file","input_schema":{"type":"object","properties":{"path":{"type":"string"}}}},{"name":"top_level","description":"Top level tool","input_schema":{"type":"object","properties":{}}}]}"#,
+        );
+
+        let rewritten = rewrite_aggregate_request_body("/v1/responses", &body, None);
+
+        let value: serde_json::Value =
+            serde_json::from_slice(rewritten.as_ref()).expect("parse rewritten body");
+        assert!(value.get("dynamicTools").is_none());
+        assert_eq!(value["tools"][0]["tools"][0]["type"], "function");
+        assert_eq!(value["tools"][0]["tools"][0]["name"], "read_file");
+        assert_eq!(
+            value["tools"][0]["tools"][0]["parameters"]["properties"]["path"]["type"],
+            "string"
+        );
+        assert_eq!(value["tools"][1]["type"], "function");
+        assert_eq!(value["tools"][1]["name"], "top_level");
     }
 
     #[test]
