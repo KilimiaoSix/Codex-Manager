@@ -23,6 +23,9 @@ pub(crate) struct RequestLogTraceContext<'a> {
     pub aggregate_api_supplier_name: Option<&'a str>,
     pub aggregate_api_url: Option<&'a str>,
     pub attempted_aggregate_api_ids: Option<&'a [String]>,
+    pub upstream_model: Option<&'a str>,
+    pub actual_source_kind: Option<&'a str>,
+    pub actual_source_id: Option<&'a str>,
 }
 
 #[allow(dead_code)]
@@ -254,6 +257,39 @@ fn should_write_gateway_error_fallback(status_code: Option<u16>, error: Option<&
         || normalized.contains("usage_limit_reached")
 }
 
+fn normalize_log_text(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn resolve_route_details(
+    storage: &Storage,
+    trace_context: &RequestLogTraceContext<'_>,
+    account_id: Option<&str>,
+    model: Option<&str>,
+) -> (Option<String>, Option<String>, Option<String>) {
+    let actual_source_kind = normalize_log_text(trace_context.actual_source_kind).or_else(|| {
+        account_id
+            .and_then(|value| normalize_log_text(Some(value)))
+            .map(|_| "openai_account".to_string())
+    });
+    let actual_source_id = normalize_log_text(trace_context.actual_source_id)
+        .or_else(|| normalize_log_text(account_id));
+    let upstream_model = normalize_log_text(trace_context.upstream_model).or_else(|| {
+        let platform_model = model.map(str::trim).filter(|value| !value.is_empty())?;
+        let source_kind = actual_source_kind.as_deref()?;
+        let source_id = actual_source_id.as_deref()?;
+        storage
+            .find_enabled_model_source_mapping(platform_model, source_kind, source_id)
+            .ok()
+            .flatten()
+            .map(|mapping| mapping.upstream_model)
+    });
+    (upstream_model, actual_source_kind, actual_source_id)
+}
+
 /// 函数 `response_adapter_label`
 ///
 /// 作者: gaohongshun
@@ -395,6 +431,8 @@ pub(crate) fn write_request_log_with_attempts(
         .effective_service_tier
         .map(str::trim)
         .filter(|value| !value.is_empty());
+    let (upstream_model, actual_source_kind, actual_source_id) =
+        resolve_route_details(storage, &trace_context, account_id, model);
     super::trace_log::log_failed_request(super::trace_log::FailedRequestLog {
         ts: created_at,
         trace_id: trace_context.trace_id,
@@ -457,6 +495,9 @@ pub(crate) fn write_request_log_with_attempts(
             transparent_mode: None,
             enhanced_mode: None,
             model: model.map(|v| v.to_string()),
+            upstream_model,
+            actual_source_kind,
+            actual_source_id,
             reasoning_effort: reasoning_effort.map(|v| v.to_string()),
             service_tier: service_tier.map(str::to_string),
             effective_service_tier: effective_service_tier.map(str::to_string),

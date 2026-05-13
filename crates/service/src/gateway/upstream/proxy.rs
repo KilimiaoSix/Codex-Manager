@@ -134,6 +134,7 @@ fn route_kind_label(value: GatewayUpstreamRouteKind) -> &'static str {
 
 fn model_route_error(
     storage: &crate::storage_helpers::StorageHandle,
+    key_id: &str,
     model: Option<&str>,
 ) -> Result<(), (u16, String)> {
     let Some(model) = model.map(str::trim).filter(|value| !value.is_empty()) else {
@@ -147,6 +148,12 @@ fn model_route_error(
         .any(|item| item.slug == model);
     if !model_exists {
         return Err((404, format!("model_not_found: {model}")));
+    }
+    if let Err(err) = crate::resolve_api_key_model_group_access(storage, key_id, model) {
+        if err.contains("model_not_allowed") {
+            return Err((403, err));
+        }
+        return Err((500, err));
     }
     let mappings = storage
         .list_enabled_model_source_mappings_for_platform(model)
@@ -512,7 +519,9 @@ pub(in super::super) fn proxy_validated_request(
         route_kind_label(execution_plan.route_kind),
     );
 
-    if let Err((status_code, message)) = model_route_error(&storage, model_for_log.as_deref()) {
+    if let Err((status_code, message)) =
+        model_route_error(&storage, key_id.as_str(), model_for_log.as_deref())
+    {
         return respond_model_route_error(
             request,
             &storage,

@@ -31,7 +31,7 @@ const CUSTOM_BALANCE_AUTH_BALANCE_BEARER: &str = "balance_bearer";
 const CUSTOM_BALANCE_AUTH_NONE: &str = "none";
 const CLAUDE_DEFAULT_PROBE_MODEL: &str = "claude-haiku-4-5-20251001";
 const ALIBABA_CODING_PLAN_PROBE_MODEL: &str = "qwen3.5-plus";
-const MAX_DISCOVERED_CLAUDE_PROBE_MODELS: usize = 8;
+const MAX_DISCOVERED_MODEL_IDS: usize = 512;
 const AGGREGATE_API_MODEL_SOURCE_KIND: &str = "aggregate_api";
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -700,6 +700,20 @@ mod tests {
                 "provider-model-c".to_string()
             ]
         );
+    }
+
+    #[test]
+    fn extract_model_ids_from_models_response_keeps_full_provider_catalog() {
+        let mut data = (0..13)
+            .map(|index| serde_json::json!({ "id": format!("provider-model-{index}") }))
+            .collect::<Vec<Value>>();
+        data.push(serde_json::json!({ "id": "gpt-5.5" }));
+        let body = serde_json::json!({ "data": data }).to_string();
+
+        let models = extract_model_ids_from_models_response(body.as_str());
+
+        assert!(models.contains(&"gpt-5.5".to_string()));
+        assert_eq!(models.len(), 14);
     }
 
     #[test]
@@ -1911,7 +1925,7 @@ fn extract_model_ids_from_models_response(body: &str) -> Vec<String> {
     };
     let mut models = Vec::new();
     for item in items {
-        if models.len() >= MAX_DISCOVERED_CLAUDE_PROBE_MODELS {
+        if models.len() >= MAX_DISCOVERED_MODEL_IDS {
             break;
         }
         if let Some(model) = model_id_from_value(item) {

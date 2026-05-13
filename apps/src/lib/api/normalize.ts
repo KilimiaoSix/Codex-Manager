@@ -1447,6 +1447,11 @@ export function normalizeRequestLog(item: unknown): RequestLog | null {
     requestType: asString(source.requestType ?? source.request_type) || "http",
     path: requestPath,
     model: asString(source.model),
+    upstreamModel: asString(source.upstreamModel ?? source.upstream_model),
+    actualSourceKind: asString(
+      source.actualSourceKind ?? source.actual_source_kind
+    ),
+    actualSourceId: asString(source.actualSourceId ?? source.actual_source_id),
     reasoningEffort: asString(source.reasoningEffort ?? source.reasoning_effort),
     serviceTier: asString(source.serviceTier ?? source.service_tier),
     effectiveServiceTier: asString(

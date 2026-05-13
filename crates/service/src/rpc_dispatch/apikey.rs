@@ -1,7 +1,8 @@
 use codexmanager_core::rpc::types::{
     ApiKeyListResult, ApiKeyUsageStatListResult, JsonRpcRequest, JsonRpcResponse,
-    ManagedModelCatalogUpsertParams, ManagedModelSourceMappingUpsertParams,
-    ManagedModelSourceModelUpsertParams, ManagedModelSourceSyncParams,
+    ManagedModelCatalogResult, ManagedModelCatalogUpsertParams, ManagedModelRoutingResult,
+    ManagedModelSourceMappingUpsertParams, ManagedModelSourceModelUpsertParams,
+    ManagedModelSourceSyncParams, ModelsResponse,
 };
 
 use crate::RpcActor;
@@ -22,6 +23,60 @@ fn ensure_api_key_access(actor: &RpcActor, key_id: &str) -> Result<(), String> {
         return Ok(());
     }
     Err("permission_denied: apikey".to_string())
+}
+
+fn allowed_model_slugs_for_actor(
+    actor: &RpcActor,
+) -> Result<Option<std::collections::HashSet<String>>, String> {
+    if actor.is_admin() {
+        return Ok(None);
+    }
+    let user_id = actor
+        .user_id
+        .as_deref()
+        .ok_or_else(|| "permission_denied: models requires user session".to_string())?;
+    let storage =
+        crate::storage_helpers::open_storage().ok_or_else(|| "storage unavailable".to_string())?;
+    let slugs = storage
+        .allowed_model_slugs_for_user(user_id, codexmanager_core::storage::now_ts())
+        .map_err(|err| format!("read allowed model groups failed: {err}"))?
+        .into_iter()
+        .collect();
+    Ok(Some(slugs))
+}
+
+fn filter_models_for_actor(
+    actor: &RpcActor,
+    models: ModelsResponse,
+) -> Result<ModelsResponse, String> {
+    let Some(allowed) = allowed_model_slugs_for_actor(actor)? else {
+        return Ok(models);
+    };
+    Ok(ModelsResponse {
+        models: models
+            .models
+            .into_iter()
+            .filter(|model| allowed.contains(model.slug.as_str()))
+            .collect(),
+        extra: models.extra,
+    })
+}
+
+fn filter_catalog_for_actor(
+    actor: &RpcActor,
+    catalog: ManagedModelCatalogResult,
+) -> Result<ManagedModelCatalogResult, String> {
+    let Some(allowed) = allowed_model_slugs_for_actor(actor)? else {
+        return Ok(catalog);
+    };
+    Ok(ManagedModelCatalogResult {
+        items: catalog
+            .items
+            .into_iter()
+            .filter(|item| allowed.contains(item.model.slug.as_str()))
+            .collect(),
+        extra: catalog.extra,
+    })
 }
 
 /// 函数 `try_handle`
@@ -107,11 +162,17 @@ pub(super) fn try_handle(req: &JsonRpcRequest, actor: &RpcActor) -> Option<JsonR
         }
         "apikey/models" => {
             let refresh_remote = super::bool_param(req, "refreshRemote").unwrap_or(false);
-            super::value_or_error(apikey_models::read_model_options(refresh_remote))
+            super::value_or_error(
+                apikey_models::read_model_options(refresh_remote)
+                    .and_then(|models| filter_models_for_actor(actor, models)),
+            )
         }
         "apikey/modelCatalogList" => {
             let refresh_remote = super::bool_param(req, "refreshRemote").unwrap_or(false);
-            super::value_or_error(apikey_models::read_managed_model_catalog(refresh_remote))
+            super::value_or_error(
+                apikey_models::read_managed_model_catalog(refresh_remote)
+                    .and_then(|catalog| filter_catalog_for_actor(actor, catalog)),
+            )
         }
         "apikey/modelCatalogSave" => {
             let params = req
@@ -128,7 +189,13 @@ pub(super) fn try_handle(req: &JsonRpcRequest, actor: &RpcActor) -> Option<JsonR
             let slug = super::str_param(req, "slug").unwrap_or("");
             super::ok_or_error(apikey_models::delete_managed_model_catalog_model(slug))
         }
-        "apikey/modelRouting" => super::value_or_error(apikey_models::read_managed_model_routing()),
+        "apikey/modelRouting" => {
+            if actor.is_admin() {
+                super::value_or_error(apikey_models::read_managed_model_routing())
+            } else {
+                super::value_or_error::<ManagedModelRoutingResult>(Ok(Default::default()))
+            }
+        }
         "apikey/modelSourceSync" => {
             let params = req
                 .params

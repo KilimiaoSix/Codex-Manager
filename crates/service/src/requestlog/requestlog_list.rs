@@ -100,7 +100,10 @@ pub(crate) fn read_request_logs(
     let logs = storage
         .list_request_logs(query.as_deref(), limit.unwrap_or(200))
         .map_err(|err| format!("list request logs failed: {err}"))?;
-    Ok(logs.into_iter().map(to_request_log_summary).collect())
+    Ok(logs
+        .into_iter()
+        .map(|item| to_request_log_summary(item, true))
+        .collect())
 }
 
 pub(crate) fn read_request_logs_for_key_ids(
@@ -112,7 +115,10 @@ pub(crate) fn read_request_logs_for_key_ids(
     let logs = storage
         .list_request_logs_for_keys(query.as_deref(), limit.unwrap_or(200), key_ids)
         .map_err(|err| format!("list request logs failed: {err}"))?;
-    Ok(logs.into_iter().map(to_request_log_summary).collect())
+    Ok(logs
+        .into_iter()
+        .map(|item| to_request_log_summary(item, false))
+        .collect())
 }
 
 /// 函数 `read_request_log_page`
@@ -152,7 +158,10 @@ pub(crate) fn read_request_log_page(
         .map_err(|err| format!("list request logs failed: {err}"))?;
 
     Ok(RequestLogListResult {
-        items: logs.into_iter().map(to_request_log_summary).collect(),
+        items: logs
+            .into_iter()
+            .map(|item| to_request_log_summary(item, true))
+            .collect(),
         total,
         page,
         page_size,
@@ -193,7 +202,10 @@ pub(crate) fn read_request_log_page_for_key_ids(
         .map_err(|err| format!("list request logs failed: {err}"))?;
 
     Ok(RequestLogListResult {
-        items: logs.into_iter().map(to_request_log_summary).collect(),
+        items: logs
+            .into_iter()
+            .map(|item| to_request_log_summary(item, false))
+            .collect(),
         total,
         page,
         page_size,
@@ -308,7 +320,7 @@ fn clamp_page(page: i64, total: i64, page_size: i64) -> i64 {
 ///
 /// # 返回
 /// 返回函数执行结果
-fn to_request_log_summary(item: RequestLog) -> RequestLogSummary {
+fn to_request_log_summary(item: RequestLog, include_route_details: bool) -> RequestLogSummary {
     let attempted_account_ids = item
         .attempted_account_ids_json
         .as_deref()
@@ -343,6 +355,15 @@ fn to_request_log_summary(item: RequestLog) -> RequestLogSummary {
         transparent_mode: item.transparent_mode,
         enhanced_mode: item.enhanced_mode,
         model: item.model,
+        upstream_model: include_route_details
+            .then_some(item.upstream_model)
+            .flatten(),
+        actual_source_kind: include_route_details
+            .then_some(item.actual_source_kind)
+            .flatten(),
+        actual_source_id: include_route_details
+            .then_some(item.actual_source_id)
+            .flatten(),
         reasoning_effort: item.reasoning_effort,
         service_tier: item.service_tier,
         effective_service_tier: item.effective_service_tier,

@@ -16,6 +16,7 @@ mod apikey;
 mod app_settings;
 mod dashboard;
 mod gateway;
+mod model_groups;
 mod quota;
 mod requestlog;
 mod service_config;
@@ -281,6 +282,9 @@ pub(crate) fn handle_request_with_actor(req: JsonRpcRequest, actor: RpcActor) ->
         return JsonRpcMessage::Response(resp);
     }
     if let Some(resp) = gateway::try_handle(&req) {
+        return JsonRpcMessage::Response(resp);
+    }
+    if let Some(resp) = model_groups::try_handle(&req, &actor) {
         return JsonRpcMessage::Response(resp);
     }
     if let Some(resp) = quota::try_handle(&req) {

@@ -33,6 +33,11 @@ macro_rules! invoke_handler {
             crate::commands::account_manager::service_account_manager_wallet_top_up,
             crate::commands::account_manager::service_account_manager_api_key_owners_list,
             crate::commands::account_manager::service_account_manager_api_key_owner_set,
+            crate::commands::account_manager::service_model_groups_list,
+            crate::commands::account_manager::service_model_group_save,
+            crate::commands::account_manager::service_model_group_delete,
+            crate::commands::account_manager::service_model_group_models_set,
+            crate::commands::account_manager::service_model_group_users_set,
             // usage
             crate::commands::usage::service_usage_read,
             crate::commands::usage::service_usage_list,

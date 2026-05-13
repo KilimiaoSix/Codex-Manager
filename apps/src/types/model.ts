@@ -92,3 +92,41 @@ export interface ManagedModelRouting {
   sourceModels: ManagedModelSourceModel[];
   mappings: ManagedModelSourceMapping[];
 }
+
+export interface ModelGroup {
+  id: string;
+  name: string;
+  description: string | null;
+  status: string;
+  sort: number;
+  isDefault: boolean;
+  rateMultiplierMillis: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ModelGroupModel {
+  groupId: string;
+  platformModelSlug: string;
+  enabled: boolean;
+  rateMultiplierMillis: number | null;
+  billingModelSlug: string | null;
+  note: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface UserModelGroup {
+  userId: string;
+  groupId: string;
+  status: string;
+  expiresAt: number | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ModelGroupListResult {
+  groups: ModelGroup[];
+  models: ModelGroupModel[];
+  userAssignments: UserModelGroup[];
+}

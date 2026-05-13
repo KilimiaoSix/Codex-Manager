@@ -1044,6 +1044,103 @@ pub struct ManagedModelSourceMappingUpsertParams {
     pub billing_model_slug: Option<String>,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelGroupEntry {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub status: String,
+    pub sort: i64,
+    pub is_default: bool,
+    pub rate_multiplier_millis: i64,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelGroupModelEntry {
+    pub group_id: String,
+    pub platform_model_slug: String,
+    pub enabled: bool,
+    pub rate_multiplier_millis: Option<i64>,
+    pub billing_model_slug: Option<String>,
+    pub note: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserModelGroupEntry {
+    pub user_id: String,
+    pub group_id: String,
+    pub status: String,
+    pub expires_at: Option<i64>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelGroupListResult {
+    #[serde(default)]
+    pub groups: Vec<ModelGroupEntry>,
+    #[serde(default)]
+    pub models: Vec<ModelGroupModelEntry>,
+    #[serde(default)]
+    pub user_assignments: Vec<UserModelGroupEntry>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelGroupUpsertParams {
+    #[serde(default)]
+    pub id: Option<String>,
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub sort: Option<i64>,
+    #[serde(default)]
+    pub is_default: Option<bool>,
+    #[serde(default)]
+    pub rate_multiplier_millis: Option<i64>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelGroupModelUpsertParams {
+    pub platform_model_slug: String,
+    #[serde(default)]
+    pub enabled: Option<bool>,
+    #[serde(default)]
+    pub rate_multiplier_millis: Option<i64>,
+    #[serde(default)]
+    pub billing_model_slug: Option<String>,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelGroupModelsSetParams {
+    pub group_id: String,
+    #[serde(default)]
+    pub models: Vec<ModelGroupModelUpsertParams>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelGroupUsersSetParams {
+    pub group_id: String,
+    #[serde(default)]
+    pub user_ids: Vec<String>,
+}
+
 fn default_model_source_kind() -> String {
     "remote".to_string()
 }
@@ -1159,6 +1256,9 @@ pub struct RequestLogSummary {
     pub transparent_mode: Option<bool>,
     pub enhanced_mode: Option<bool>,
     pub model: Option<String>,
+    pub upstream_model: Option<String>,
+    pub actual_source_kind: Option<String>,
+    pub actual_source_id: Option<String>,
     pub reasoning_effort: Option<String>,
     pub service_tier: Option<String>,
     pub effective_service_tier: Option<String>,

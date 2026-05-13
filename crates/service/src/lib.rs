@@ -11,6 +11,7 @@ mod errors;
 mod gateway;
 mod http;
 mod lifecycle;
+mod model_groups;
 mod plugin;
 mod quota;
 mod requestlog;
@@ -54,6 +55,11 @@ pub(crate) use auth::callback as auth_callback;
 pub(crate) use auth::login as auth_login;
 pub(crate) use auth::tokens as auth_tokens;
 pub(crate) use errors as error_codes;
+pub(crate) use model_groups::{
+    allowed_model_slugs_for_api_key, delete_model_group, read_model_groups,
+    resolve_api_key_model_group_access, set_model_group_models, set_model_group_users,
+    upsert_model_group,
+};
 pub(crate) use requestlog::clear as requestlog_clear;
 pub(crate) use requestlog::error_list as requestlog_error_list;
 pub(crate) use requestlog::list as requestlog_list;

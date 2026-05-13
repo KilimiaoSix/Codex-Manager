@@ -657,7 +657,7 @@ pub fn wallet_charge_for_request(
     service_tier: Option<&str>,
     raw_usage_json: Option<String>,
 ) -> Result<Option<AppWalletLedgerEntry>, String> {
-    if !distribution_enabled_for_storage(storage) || estimated_cost_usd <= 0.0 {
+    if !distribution_enabled_for_storage(storage) {
         return Ok(None);
     }
     let Some(key_id) = key_id.map(str::trim).filter(|value| !value.is_empty()) else {
@@ -676,13 +676,36 @@ pub fn wallet_charge_for_request(
         .find_wallet_by_owner(owner_kind, owner_id)
         .map_err(|err| format!("read app wallet failed: {err}"))?
         .ok_or_else(|| "归属钱包不存在".to_string())?;
-    let billing_rule =
-        resolve_billing_rule_for_request(storage, key_id, &owner, model, service_tier, now)?;
-    let multiplier_millis = billing_rule
+    let model_group_access = match model.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(platform_model) => {
+            crate::resolve_api_key_model_group_access(storage, key_id, platform_model)?
+        }
+        None => None,
+    };
+    let billing_rule = if model_group_access.is_some() {
+        None
+    } else {
+        resolve_billing_rule_for_request(storage, key_id, &owner, model, service_tier, now)?
+    };
+    let multiplier_millis = model_group_access
         .as_ref()
-        .map(|rule| rule.multiplier_millis.max(0))
+        .map(|access| access.rate_multiplier_millis.max(0))
+        .or_else(|| {
+            billing_rule
+                .as_ref()
+                .map(|rule| rule.multiplier_millis.max(0))
+        })
         .unwrap_or(1_000);
-    let charged_cost_usd = estimated_cost_usd * multiplier_millis as f64 / 1_000.0;
+    let base_cost_usd = model_group_base_cost_usd(
+        storage,
+        model_group_access.as_ref(),
+        estimated_cost_usd,
+        raw_usage_json.as_deref(),
+    );
+    if base_cost_usd <= 0.0 {
+        return Ok(None);
+    }
+    let charged_cost_usd = base_cost_usd * multiplier_millis as f64 / 1_000.0;
     let charge = (charged_cost_usd * CREDIT_MICROS_PER_USD).round() as i64;
     if charge <= 0 {
         return Ok(None);
@@ -699,9 +722,11 @@ pub fn wallet_charge_for_request(
         raw_usage_json: usage_json_with_billing(
             raw_usage_json,
             estimated_cost_usd,
+            base_cost_usd,
             charged_cost_usd,
             multiplier_millis,
             billing_rule.as_ref(),
+            model_group_access.as_ref(),
         ),
         note: billing_rule
             .as_ref()
@@ -713,6 +738,108 @@ pub fn wallet_charge_for_request(
         .adjust_wallet_balance(&ledger)
         .map_err(|err| format!("charge wallet failed: {err}"))?;
     Ok(Some(entry))
+}
+
+fn model_group_base_cost_usd(
+    storage: &Storage,
+    model_group_access: Option<&codexmanager_core::storage::ModelGroupAccess>,
+    estimated_cost_usd: f64,
+    raw_usage_json: Option<&str>,
+) -> f64 {
+    model_group_access
+        .and_then(|access| access.billing_model_slug.as_deref())
+        .and_then(|billing_model| {
+            estimate_billing_model_cost_usd(storage, billing_model, raw_usage_json)
+        })
+        .unwrap_or(estimated_cost_usd)
+        .max(0.0)
+}
+
+fn estimate_billing_model_cost_usd(
+    storage: &Storage,
+    billing_model: &str,
+    raw_usage_json: Option<&str>,
+) -> Option<f64> {
+    let usage = raw_usage_json.and_then(|raw| serde_json::from_str::<Value>(raw).ok())?;
+    let input_tokens = extract_usage_token(
+        &usage,
+        &["inputTokens", "input_tokens", "prompt_tokens"],
+        &[&["usage", "input_tokens"], &["usage", "prompt_tokens"]],
+    );
+    let cached_input_tokens = extract_usage_token(
+        &usage,
+        &[
+            "cachedInputTokens",
+            "cached_input_tokens",
+            "cache_read_input_tokens",
+        ],
+        &[
+            &["input_tokens_details", "cached_tokens"],
+            &["prompt_tokens_details", "cached_tokens"],
+            &["usage", "input_tokens_details", "cached_tokens"],
+            &["usage", "prompt_tokens_details", "cached_tokens"],
+            &["usage", "cache_read_input_tokens"],
+        ],
+    );
+    let output_tokens = extract_usage_token(
+        &usage,
+        &["outputTokens", "output_tokens", "completion_tokens"],
+        &[&["usage", "output_tokens"], &["usage", "completion_tokens"]],
+    );
+    if input_tokens.is_none() && cached_input_tokens.is_none() && output_tokens.is_none() {
+        return None;
+    }
+    let cost = crate::quota::model_pricing::estimate_cost_usd_for_log(
+        storage,
+        Some(billing_model),
+        input_tokens,
+        cached_input_tokens,
+        output_tokens,
+    );
+    if cost > 0.0 {
+        Some(cost)
+    } else {
+        None
+    }
+}
+
+fn extract_usage_token(value: &Value, keys: &[&str], nested_paths: &[&[&str]]) -> Option<i64> {
+    keys.iter()
+        .find_map(|key| value.get(*key).and_then(value_as_i64))
+        .or_else(|| {
+            nested_paths
+                .iter()
+                .find_map(|path| value_at_path(value, path).and_then(value_as_i64))
+        })
+        .map(|value| value.max(0))
+}
+
+fn value_at_path<'a>(value: &'a Value, path: &[&str]) -> Option<&'a Value> {
+    let mut cursor = value;
+    for key in path {
+        cursor = cursor.get(*key)?;
+    }
+    Some(cursor)
+}
+
+fn value_as_i64(value: &Value) -> Option<i64> {
+    value
+        .as_i64()
+        .or_else(|| value.as_u64().and_then(|value| i64::try_from(value).ok()))
+        .or_else(|| {
+            value.as_f64().and_then(|value| {
+                if value.is_finite() && value >= 0.0 {
+                    Some(value.round() as i64)
+                } else {
+                    None
+                }
+            })
+        })
+        .or_else(|| {
+            value
+                .as_str()
+                .and_then(|value| value.trim().parse::<i64>().ok())
+        })
 }
 
 fn resolve_billing_rule_for_request(
@@ -811,10 +938,12 @@ fn billing_rule_scope_score(rule: &BillingRule) -> i64 {
 
 fn usage_json_with_billing(
     raw_usage_json: Option<String>,
+    platform_estimated_cost_usd: f64,
     base_cost_usd: f64,
     charged_cost_usd: f64,
     multiplier_millis: i64,
     billing_rule: Option<&BillingRule>,
+    model_group_access: Option<&codexmanager_core::storage::ModelGroupAccess>,
 ) -> Option<String> {
     let mut value = raw_usage_json
         .as_deref()
@@ -824,6 +953,10 @@ fn usage_json_with_billing(
         value = serde_json::json!({ "raw": value });
     }
     if let Some(object) = value.as_object_mut() {
+        object.insert(
+            "platformEstimatedCostUsd".to_string(),
+            serde_json::json!(platform_estimated_cost_usd.max(0.0)),
+        );
         object.insert(
             "baseEstimatedCostUsd".to_string(),
             serde_json::json!(base_cost_usd.max(0.0)),
@@ -839,6 +972,26 @@ fn usage_json_with_billing(
         if let Some(rule) = billing_rule {
             object.insert("billingRuleId".to_string(), serde_json::json!(rule.id));
             object.insert("billingRuleName".to_string(), serde_json::json!(rule.name));
+        }
+        if let Some(access) = model_group_access {
+            object.insert(
+                "modelGroupId".to_string(),
+                serde_json::json!(access.group_id),
+            );
+            object.insert(
+                "modelGroupName".to_string(),
+                serde_json::json!(access.group_name),
+            );
+            object.insert(
+                "platformModelSlug".to_string(),
+                serde_json::json!(access.platform_model_slug),
+            );
+            if let Some(billing_model_slug) = access.billing_model_slug.as_deref() {
+                object.insert(
+                    "billingModelSlug".to_string(),
+                    serde_json::json!(billing_model_slug),
+                );
+            }
         }
     }
     serde_json::to_string(&value).ok()
@@ -881,6 +1034,9 @@ fn create_app_user_with_storage(
         .insert_app_user(&user)
         .map_err(|err| format!("create app user failed: {err}"))?;
     let wallet = if app_user_can_own_wallet(&user) {
+        storage
+            .assign_default_model_group_to_user(&user.id)
+            .map_err(|err| format!("assign default model group failed: {err}"))?;
         Some(ensure_wallet(storage, "user", &user.id)?)
     } else {
         None

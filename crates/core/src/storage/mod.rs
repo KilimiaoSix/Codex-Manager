@@ -13,6 +13,7 @@ mod api_keys;
 mod conversation_bindings;
 mod events;
 mod gateway_error_logs;
+mod model_groups;
 mod model_options;
 mod model_price_rules;
 mod model_sources;
@@ -189,6 +190,9 @@ pub struct RequestLog {
     pub transparent_mode: Option<bool>,
     pub enhanced_mode: Option<bool>,
     pub model: Option<String>,
+    pub upstream_model: Option<String>,
+    pub actual_source_kind: Option<String>,
+    pub actual_source_id: Option<String>,
     pub reasoning_effort: Option<String>,
     pub service_tier: Option<String>,
     pub effective_service_tier: Option<String>,
@@ -377,6 +381,50 @@ pub struct BillingRule {
     pub ends_at: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct ModelGroup {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub status: String,
+    pub sort: i64,
+    pub is_default: bool,
+    pub rate_multiplier_millis: i64,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct ModelGroupModel {
+    pub group_id: String,
+    pub platform_model_slug: String,
+    pub enabled: bool,
+    pub rate_multiplier_millis: Option<i64>,
+    pub billing_model_slug: Option<String>,
+    pub note: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct UserModelGroup {
+    pub user_id: String,
+    pub group_id: String,
+    pub status: String,
+    pub expires_at: Option<i64>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct ModelGroupAccess {
+    pub group_id: String,
+    pub group_name: String,
+    pub platform_model_slug: String,
+    pub rate_multiplier_millis: i64,
+    pub billing_model_slug: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -931,6 +979,16 @@ impl Storage {
             include_str!("../../migrations/059_aggregate_api_supplier_models.sql"),
             |s| s.ensure_aggregate_api_supplier_model_tables(),
         )?;
+        self.apply_sql_or_compat_migration(
+            "060_request_logs_route_details",
+            include_str!("../../migrations/060_request_logs_route_details.sql"),
+            |s| s.ensure_request_log_route_detail_columns(),
+        )?;
+        self.apply_sql_or_compat_migration(
+            "061_model_groups",
+            include_str!("../../migrations/061_model_groups.sql"),
+            |s| s.ensure_model_group_tables(),
+        )?;
         self.ensure_api_key_rotation_columns()?;
         self.ensure_aggregate_apis_table()?;
         self.ensure_aggregate_api_supplier_model_tables()?;
@@ -943,12 +1001,14 @@ impl Storage {
         self.ensure_request_log_request_type_and_service_tier_columns()?;
         self.ensure_request_log_effective_service_tier_column()?;
         self.ensure_request_log_first_response_column()?;
+        self.ensure_request_log_route_detail_columns()?;
         self.ensure_model_catalog_models_table()?;
         self.ensure_account_subscriptions_table()?;
         self.ensure_quota_pool_tables()?;
         self.ensure_account_manager_tables()?;
         self.ensure_model_source_tables()?;
         self.ensure_aggregate_api_supplier_model_tables()?;
+        self.ensure_model_group_tables()?;
         Ok(())
     }
 

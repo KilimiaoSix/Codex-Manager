@@ -9,6 +9,10 @@ import {
   AppUser,
   AppWallet,
   CodexLatestVersionInfo,
+  ModelGroup,
+  ModelGroupListResult,
+  ModelGroupModel,
+  UserModelGroup,
 } from "../../types";
 import { normalizeAppSettings } from "./normalize";
 import {
@@ -73,6 +77,59 @@ function readAppUser(value: unknown): AppUser {
     updatedAt: asNumber(source.updatedAt),
     lastLoginAt: asNumber(source.lastLoginAt) || null,
     wallet: readWallet(source.wallet),
+  };
+}
+
+function readModelGroup(value: unknown): ModelGroup {
+  const source = asRecord(value);
+  return {
+    id: asString(source.id),
+    name: asString(source.name),
+    description: asString(source.description) || null,
+    status: asString(source.status) || "active",
+    sort: asNumber(source.sort),
+    isDefault: asBoolean(source.isDefault),
+    rateMultiplierMillis: asNumber(source.rateMultiplierMillis, 1000),
+    createdAt: asNumber(source.createdAt),
+    updatedAt: asNumber(source.updatedAt),
+  };
+}
+
+function readModelGroupModel(value: unknown): ModelGroupModel {
+  const source = asRecord(value);
+  return {
+    groupId: asString(source.groupId),
+    platformModelSlug: asString(source.platformModelSlug),
+    enabled: asBoolean(source.enabled, true),
+    rateMultiplierMillis:
+      typeof source.rateMultiplierMillis === "number" ? source.rateMultiplierMillis : null,
+    billingModelSlug: asString(source.billingModelSlug) || null,
+    note: asString(source.note) || null,
+    createdAt: asNumber(source.createdAt),
+    updatedAt: asNumber(source.updatedAt),
+  };
+}
+
+function readUserModelGroup(value: unknown): UserModelGroup {
+  const source = asRecord(value);
+  return {
+    userId: asString(source.userId),
+    groupId: asString(source.groupId),
+    status: asString(source.status) || "active",
+    expiresAt: typeof source.expiresAt === "number" ? source.expiresAt : null,
+    createdAt: asNumber(source.createdAt),
+    updatedAt: asNumber(source.updatedAt),
+  };
+}
+
+function readModelGroupList(value: unknown): ModelGroupListResult {
+  const source = asRecord(value);
+  return {
+    groups: Array.isArray(source.groups) ? source.groups.map(readModelGroup) : [],
+    models: Array.isArray(source.models) ? source.models.map(readModelGroupModel) : [],
+    userAssignments: Array.isArray(source.userAssignments)
+      ? source.userAssignments.map(readUserModelGroup)
+      : [],
   };
 }
 
@@ -222,6 +279,46 @@ export const appClient = {
       payload
     );
     return readApiKeyOwner(result);
+  },
+  async listModelGroups(): Promise<ModelGroupListResult> {
+    const result = await invoke<unknown>("service_model_groups_list");
+    return readModelGroupList(result);
+  },
+  async saveModelGroup(payload: {
+    id?: string | null;
+    name: string;
+    description?: string | null;
+    status?: string | null;
+    sort?: number | null;
+    isDefault?: boolean | null;
+    rateMultiplierMillis?: number | null;
+  }): Promise<ModelGroup> {
+    const result = await invoke<unknown>("service_model_group_save", payload);
+    return readModelGroup(result);
+  },
+  async deleteModelGroup(id: string): Promise<ModelGroupListResult> {
+    const result = await invoke<unknown>("service_model_group_delete", { id });
+    return readModelGroupList(result);
+  },
+  async setModelGroupModels(payload: {
+    groupId: string;
+    models: Array<{
+      platformModelSlug: string;
+      enabled?: boolean | null;
+      rateMultiplierMillis?: number | null;
+      billingModelSlug?: string | null;
+      note?: string | null;
+    }>;
+  }): Promise<ModelGroupListResult> {
+    const result = await invoke<unknown>("service_model_group_models_set", payload);
+    return readModelGroupList(result);
+  },
+  async setModelGroupUsers(payload: {
+    groupId: string;
+    userIds: string[];
+  }): Promise<ModelGroupListResult> {
+    const result = await invoke<unknown>("service_model_group_users_set", payload);
+    return readModelGroupList(result);
   },
   getCodexLatestVersion: () =>
     invoke<CodexLatestVersionInfo>("service_gateway_codex_latest_version_get"),

@@ -339,6 +339,14 @@ fn gateway_rewrites_account_pool_model_from_enabled_mapping() {
             .and_then(serde_json::Value::as_str),
         Some("gpt-upstream")
     );
+    let logs = storage
+        .list_request_logs(None, 10)
+        .expect("list request logs");
+    let log = logs.first().expect("request log should be written");
+    assert_eq!(log.model.as_deref(), Some("gpt-platform"));
+    assert_eq!(log.upstream_model.as_deref(), Some("gpt-upstream"));
+    assert_eq!(log.actual_source_kind.as_deref(), Some("openai_account"));
+    assert_eq!(log.actual_source_id.as_deref(), Some("acc_model_mapping"));
 }
 
 /// 函数 `gateway_tolerates_non_ascii_turn_metadata_header`

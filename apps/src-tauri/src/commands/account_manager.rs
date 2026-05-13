@@ -101,3 +101,68 @@ pub async fn service_account_manager_api_key_owner_set(
     });
     rpc_call_in_background("accountManager/apiKeyOwners/set", addr, Some(params)).await
 }
+
+#[tauri::command]
+pub async fn service_model_groups_list(
+    addr: Option<String>,
+) -> Result<serde_json::Value, String> {
+    rpc_call_in_background("modelGroups/list", addr, None).await
+}
+
+#[tauri::command]
+pub async fn service_model_group_save(
+    addr: Option<String>,
+    name: String,
+    id: Option<String>,
+    description: Option<String>,
+    status: Option<String>,
+    sort: Option<i64>,
+    is_default: Option<bool>,
+    rate_multiplier_millis: Option<i64>,
+) -> Result<serde_json::Value, String> {
+    let params = serde_json::json!({
+        "id": id,
+        "name": name,
+        "description": description,
+        "status": status,
+        "sort": sort,
+        "isDefault": is_default,
+        "rateMultiplierMillis": rate_multiplier_millis,
+    });
+    rpc_call_in_background("modelGroups/save", addr, Some(params)).await
+}
+
+#[tauri::command]
+pub async fn service_model_group_delete(
+    addr: Option<String>,
+    id: String,
+) -> Result<serde_json::Value, String> {
+    let params = serde_json::json!({ "id": id });
+    rpc_call_in_background("modelGroups/delete", addr, Some(params)).await
+}
+
+#[tauri::command]
+pub async fn service_model_group_models_set(
+    addr: Option<String>,
+    group_id: String,
+    models: Vec<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    let params = serde_json::json!({
+        "groupId": group_id,
+        "models": models,
+    });
+    rpc_call_in_background("modelGroups/setModels", addr, Some(params)).await
+}
+
+#[tauri::command]
+pub async fn service_model_group_users_set(
+    addr: Option<String>,
+    group_id: String,
+    user_ids: Vec<String>,
+) -> Result<serde_json::Value, String> {
+    let params = serde_json::json!({
+        "groupId": group_id,
+        "userIds": user_ids,
+    });
+    rpc_call_in_background("modelGroups/setUsers", addr, Some(params)).await
+}

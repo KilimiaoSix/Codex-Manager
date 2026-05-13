@@ -300,6 +300,11 @@ export function createWebCommandMap(
         };
       },
     },
+    service_model_groups_list: { rpcMethod: "modelGroups/list" },
+    service_model_group_save: { rpcMethod: "modelGroups/save" },
+    service_model_group_delete: { rpcMethod: "modelGroups/delete" },
+    service_model_group_models_set: { rpcMethod: "modelGroups/setModels" },
+    service_model_group_users_set: { rpcMethod: "modelGroups/setUsers" },
     service_dashboard_member_summary: {
       rpcMethod: "dashboard/memberSummary",
       mapParams: (params) => {

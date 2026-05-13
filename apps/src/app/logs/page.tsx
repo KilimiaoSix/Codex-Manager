@@ -784,6 +784,10 @@ function AccountKeyInfoCell({
   const aggregateApiById = apiKey?.aggregateApiId
     ? aggregateApiMap.get(apiKey.aggregateApiId) || null
     : null;
+  const actualAggregateApi =
+    log.actualSourceKind === "aggregate_api" && log.actualSourceId
+      ? aggregateApiMap.get(log.actualSourceId) || null
+      : null;
   /**
    * 函数 `aggregateApiByUrl`
    *
@@ -807,10 +811,16 @@ function AccountKeyInfoCell({
     }
     return null;
   })();
-  const aggregateApi = aggregateApiById || aggregateApiByUrl;
-  const selectedAggregateApiId = aggregateApi?.id || "";
+  const aggregateApi = actualAggregateApi || aggregateApiById || aggregateApiByUrl;
+  const selectedAggregateApiId =
+    log.actualSourceKind === "aggregate_api" && log.actualSourceId
+      ? log.actualSourceId
+      : aggregateApi?.id || "";
   const isAggregateApi = Boolean(
-    log.aggregateApiSupplierName || log.aggregateApiUrl || aggregateApi,
+    log.actualSourceKind === "aggregate_api" ||
+      log.aggregateApiSupplierName ||
+      log.aggregateApiUrl ||
+      aggregateApi,
   );
   const aggregateApiDisplayName = resolveAggregateApiDisplayName(
     log,
@@ -1183,6 +1193,9 @@ function ModelEffortCell({
 }) {
   const { t } = useI18n();
   const model = String(log.model || "").trim();
+  const upstreamModel = String(log.upstreamModel || "").trim();
+  const actualSourceKind = String(log.actualSourceKind || "").trim();
+  const actualSourceId = String(log.actualSourceId || "").trim();
   const effort = String(log.reasoningEffort || "").trim();
   const clientServiceTier = resolveDisplayServiceTier(log.serviceTier);
   const effectiveServiceTier = resolveDisplayServiceTier(
@@ -1199,15 +1212,34 @@ function ModelEffortCell({
           <span className="block max-w-[160px] truncate font-medium text-foreground">
             {display}
           </span>
+          {upstreamModel && upstreamModel !== model ? (
+            <span className="block max-w-[160px] truncate font-mono text-[10px] text-muted-foreground">
+              -&gt; {upstreamModel}
+            </span>
+          ) : null}
           <ServiceTierBadge serviceTier={badgeServiceTier} />
         </div>
       </TooltipTrigger>
       <TooltipContent className="max-w-sm">
         <div className="flex min-w-[220px] flex-col gap-2">
           <div className="space-y-0.5">
-            <div className="text-[10px] text-background/70">{t("模型")}</div>
+            <div className="text-[10px] text-background/70">{t("平台模型")}</div>
             <div className="break-all font-mono text-[11px]">
               {model || "-"}
+            </div>
+          </div>
+          <div className="space-y-0.5">
+            <div className="text-[10px] text-background/70">{t("上游模型")}</div>
+            <div className="break-all font-mono text-[11px]">
+              {upstreamModel || "-"}
+            </div>
+          </div>
+          <div className="space-y-0.5">
+            <div className="text-[10px] text-background/70">{t("实际来源")}</div>
+            <div className="break-all font-mono text-[11px]">
+              {actualSourceKind && actualSourceId
+                ? `${actualSourceKind}:${actualSourceId}`
+                : actualSourceKind || actualSourceId || "-"}
             </div>
           </div>
           <div className="space-y-0.5">

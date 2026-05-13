@@ -1,6 +1,6 @@
 use super::*;
 use codexmanager_core::rpc::types::{JsonRpcMessage, JsonRpcResponse};
-use codexmanager_core::storage::{RequestLog, RequestTokenStat};
+use codexmanager_core::storage::{ModelGroupModel, RequestLog, RequestTokenStat};
 
 /// 函数 `response_result`
 ///
@@ -274,6 +274,9 @@ fn insert_test_request_log(
                 request_path: "/v1/chat/completions".to_string(),
                 method: "POST".to_string(),
                 model: Some(model.to_string()),
+                upstream_model: Some(format!("{model}-upstream")),
+                actual_source_kind: Some("openai_account".to_string()),
+                actual_source_id: Some("private-account-id".to_string()),
                 status_code: Some(status_code),
                 input_tokens: Some(input_tokens),
                 cached_input_tokens: Some(cached_input_tokens),
@@ -296,6 +299,70 @@ fn insert_test_request_log(
             },
         )
         .expect("insert request log");
+}
+
+#[test]
+fn wallet_charge_uses_model_group_billing_model_override() {
+    let _guard = test_env_guard();
+    let db_path = setup_dashboard_test_db("codexmanager-model-group-billing-override");
+    set_distribution_enabled(true).expect("enable distribution");
+    let user = create_test_member("member-model-group-billing", Some(1_000_000));
+    let key_id = create_owned_test_api_key(&user.id, "member model group key", "gpt-5-mini");
+    let storage = storage_helpers::open_storage().expect("open storage");
+    let group_id = storage
+        .default_model_group_id()
+        .expect("read default model group")
+        .expect("default model group");
+    let now = codexmanager_core::storage::now_ts();
+    storage
+        .replace_model_group_models(
+            &group_id,
+            &[ModelGroupModel {
+                group_id: group_id.clone(),
+                platform_model_slug: "gpt-5-mini".to_string(),
+                enabled: true,
+                rate_multiplier_millis: Some(1000),
+                billing_model_slug: Some("gpt-5.5".to_string()),
+                note: None,
+                created_at: now,
+                updated_at: now,
+            }],
+        )
+        .expect("save model group models");
+
+    let ledger = wallet_charge_for_request(
+        &storage,
+        Some(&key_id),
+        42,
+        0.00225,
+        Some("gpt-5-mini"),
+        None,
+        Some(
+            serde_json::json!({
+                "inputTokens": 1000,
+                "cachedInputTokens": 0,
+                "outputTokens": 1000
+            })
+            .to_string(),
+        ),
+    )
+    .expect("charge wallet")
+    .expect("ledger entry");
+
+    assert_eq!(ledger.amount_credit_micros, -35_000);
+    let usage: serde_json::Value =
+        serde_json::from_str(ledger.raw_usage_json.as_deref().unwrap()).expect("usage json");
+    assert_eq!(usage["billingModelSlug"], "gpt-5.5");
+    assert_eq!(usage["platformEstimatedCostUsd"], 0.00225);
+    assert!((usage["baseEstimatedCostUsd"].as_f64().unwrap() - 0.035).abs() < 0.000_001);
+    assert!((usage["chargedCostUsd"].as_f64().unwrap() - 0.035).abs() < 0.000_001);
+    let wallet = storage
+        .find_wallet_by_owner("user", &user.id)
+        .expect("read wallet")
+        .expect("wallet");
+    assert_eq!(wallet.balance_credit_micros, 965_000);
+
+    let _ = std::fs::remove_file(db_path);
 }
 
 #[test]
@@ -726,6 +793,82 @@ fn member_requestlog_queries_filter_to_owned_keys() {
     assert!(list.result.get("error").is_none(), "{:?}", list.result);
     assert_eq!(list.result["total"], 1);
     assert_eq!(list.result["items"][0]["keyId"], key_one);
+    assert_eq!(list.result["items"][0]["model"], "gpt-5-mini");
+    assert!(list.result["items"][0]["upstreamModel"].is_null());
+    assert!(list.result["items"][0]["actualSourceKind"].is_null());
+    assert!(list.result["items"][0]["actualSourceId"].is_null());
+
+    let hidden_model_query = response_result(handle_request_with_actor(
+        rpc_request(
+            "requestlog/list",
+            serde_json::json!({
+                "page": 1,
+                "pageSize": 20,
+                "query": "upstream_model:=gpt-5-mini-upstream",
+                "startTs": day_start,
+                "endTs": day_end
+            }),
+        ),
+        actor_one.clone(),
+    ));
+    assert!(
+        hidden_model_query.result.get("error").is_none(),
+        "{:?}",
+        hidden_model_query.result
+    );
+    assert_eq!(hidden_model_query.result["total"], 0);
+
+    let hidden_model_global_query = response_result(handle_request_with_actor(
+        rpc_request(
+            "requestlog/list",
+            serde_json::json!({
+                "page": 1,
+                "pageSize": 20,
+                "query": "gpt-5-mini-upstream",
+                "startTs": day_start,
+                "endTs": day_end
+            }),
+        ),
+        actor_one.clone(),
+    ));
+    assert!(
+        hidden_model_global_query.result.get("error").is_none(),
+        "{:?}",
+        hidden_model_global_query.result
+    );
+    assert_eq!(hidden_model_global_query.result["total"], 0);
+
+    let admin_list = response_result(handle_request_with_actor(
+        rpc_request(
+            "requestlog/list",
+            serde_json::json!({
+                "page": 1,
+                "pageSize": 20,
+                "query": "upstream_model:=gpt-5-mini-upstream",
+                "startTs": day_start,
+                "endTs": day_end
+            }),
+        ),
+        RpcActor::system_admin(),
+    ));
+    assert!(
+        admin_list.result.get("error").is_none(),
+        "{:?}",
+        admin_list.result
+    );
+    assert_eq!(admin_list.result["total"], 1);
+    assert_eq!(
+        admin_list.result["items"][0]["upstreamModel"],
+        "gpt-5-mini-upstream"
+    );
+    assert_eq!(
+        admin_list.result["items"][0]["actualSourceKind"],
+        "openai_account"
+    );
+    assert_eq!(
+        admin_list.result["items"][0]["actualSourceId"],
+        "private-account-id"
+    );
 
     let summary = response_result(handle_request_with_actor(
         rpc_request(
