@@ -539,24 +539,41 @@ export default function ModelsPage() {
         <div className="space-y-2">
           <div className="space-y-2">
             <Badge className="w-fit rounded-full bg-primary/10 px-3 py-1 text-primary">
-              {t("模型目录")}
+              {isAdminMode ? t("模型目录") : t("可用模型")}
             </Badge>
             <div className="space-y-1">
-              <h1 className="text-3xl font-semibold tracking-tight">{t("模型管理")}</h1>
+              <h1 className="text-3xl font-semibold tracking-tight">
+                {isAdminMode ? t("模型管理") : t("可用模型")}
+              </h1>
               <p className="max-w-4xl text-sm leading-6 text-muted-foreground">
-                {t("这里维护本地结构化模型目录。默认绑定模型会优先展示 supportedInApi=true 的模型，而 Codex CLI 仍会拿到完整目录。")}
+                {isAdminMode
+                  ? t("这里维护本地结构化模型目录。默认绑定模型会优先展示 supportedInApi=true 的模型，而 Codex CLI 仍会拿到完整目录。")
+                  : t("查看当前账号可调用的平台模型。成员界面只展示平台模型名，不展示真实上游模型或来源配置。")}
               </p>
             </div>
             <div className="flex flex-wrap gap-2 text-xs">
-              <Badge variant="secondary" className="rounded-full px-3 py-1">
-                {t("完整目录会同步到 Codex CLI")}
-              </Badge>
-              <Badge variant="secondary" className="rounded-full px-3 py-1">
-                {t("默认绑定优先展示 API 可用模型")}
-              </Badge>
-              <Badge variant="secondary" className="rounded-full px-3 py-1">
-                {t("远端刷新可与本地覆写共存")}
-              </Badge>
+              {isAdminMode ? (
+                <>
+                  <Badge variant="secondary" className="rounded-full px-3 py-1">
+                    {t("完整目录会同步到 Codex CLI")}
+                  </Badge>
+                  <Badge variant="secondary" className="rounded-full px-3 py-1">
+                    {t("默认绑定优先展示 API 可用模型")}
+                  </Badge>
+                  <Badge variant="secondary" className="rounded-full px-3 py-1">
+                    {t("远端刷新可与本地覆写共存")}
+                  </Badge>
+                </>
+              ) : (
+                <>
+                  <Badge variant="secondary" className="rounded-full px-3 py-1">
+                    {t("仅展示平台模型")}
+                  </Badge>
+                  <Badge variant="secondary" className="rounded-full px-3 py-1">
+                    {t("隐藏真实上游")}
+                  </Badge>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -566,59 +583,70 @@ export default function ModelsPage() {
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div>
-                  <CardTitle>{t("模型目录明细")}</CardTitle>
+                  <CardTitle>{isAdminMode ? t("模型目录明细") : t("可用模型列表")}</CardTitle>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {t("按 slug、显示名称或描述快速定位，并结合来源与覆写状态查看当前目录。")}
+                    {isAdminMode
+                      ? t("按 slug、显示名称或描述快速定位，并结合来源与覆写状态查看当前目录。")
+                      : t("按 slug、显示名称或描述快速定位，只展示当前可见的平台模型。")}
                   </p>
                 </div>
                 {isAdminMode ? (
-                <div className="flex flex-wrap gap-2 lg:justify-end">
-                  <Button
-                    variant="outline"
-                    onClick={() => void refreshRemote()}
-                    disabled={isRefreshing}
-                  >
-                    <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
-                    {t("远端并入")}
-                  </Button>
-                  {canExportCodexCache ? (
+                  <div className="flex flex-wrap gap-2 lg:justify-end">
                     <Button
                       variant="outline"
-                      onClick={() => void exportCodexCache()}
-                      disabled={isExporting}
+                      onClick={() => void refreshRemote()}
+                      disabled={isRefreshing}
                     >
-                      <Download
-                        className={`mr-2 h-4 w-4 ${isExporting ? "animate-spin" : ""}`}
+                      <RefreshCw
+                        className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
                       />
-                      {t("导出到本地 Codex 缓存")}
+                      {t("远端并入")}
                     </Button>
-                  ) : null}
-                  <Button
-                    variant="outline"
-                    onClick={openBatchDeleteDialog}
-                    disabled={selectedSlugs.length === 0 || isDeleting}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    {t("批量删除模型")}
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      setEditingSlug(null);
-                      setModalOpen(true);
-                    }}
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    {t("新增自定义模型")}
-                  </Button>
-                </div>
+                    {canExportCodexCache ? (
+                      <Button
+                        variant="outline"
+                        onClick={() => void exportCodexCache()}
+                        disabled={isExporting}
+                      >
+                        <Download
+                          className={`mr-2 h-4 w-4 ${isExporting ? "animate-spin" : ""}`}
+                        />
+                        {t("导出到本地 Codex 缓存")}
+                      </Button>
+                    ) : null}
+                    <Button
+                      variant="outline"
+                      onClick={openBatchDeleteDialog}
+                      disabled={selectedSlugs.length === 0 || isDeleting}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      {t("批量删除模型")}
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setEditingSlug(null);
+                        setModalOpen(true);
+                      }}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      {t("新增自定义模型")}
+                    </Button>
+                  </div>
                 ) : null}
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <MiniStatBadge label={t("模型总数")} value={`${stats.total}`} />
                 <MiniStatBadge label={t("API 可用")} value={`${stats.apiEnabled}`} />
-                <MiniStatBadge label={t("可调用映射")} value={`${stats.routable}`} />
-                <MiniStatBadge label={t("自定义模型")} value={`${stats.custom}`} />
-                <MiniStatBadge label={t("本地覆写")} value={`${stats.edited}`} />
+                <MiniStatBadge
+                  label={isAdminMode ? t("可调用映射") : t("可调用")}
+                  value={`${stats.routable}`}
+                />
+                {isAdminMode ? (
+                  <>
+                    <MiniStatBadge label={t("自定义模型")} value={`${stats.custom}`} />
+                    <MiniStatBadge label={t("本地覆写")} value={`${stats.edited}`} />
+                  </>
+                ) : null}
                 <Badge variant="secondary" className="rounded-full px-3 py-1">
                   {t("当前筛选")} {currentFilterLabel}
                 </Badge>
@@ -648,13 +676,19 @@ export default function ModelsPage() {
                   <SelectContent>
                     <SelectItem value="all">{t("全部模型")}</SelectItem>
                     <SelectItem value="api">{t("仅 API 可用")}</SelectItem>
-                    <SelectItem value="custom">{t("仅自定义")}</SelectItem>
-                    <SelectItem value="edited">{t("仅本地覆写")}</SelectItem>
+                    {isAdminMode ? (
+                      <>
+                        <SelectItem value="custom">{t("仅自定义")}</SelectItem>
+                        <SelectItem value="edited">{t("仅本地覆写")}</SelectItem>
+                      </>
+                    ) : null}
                   </SelectContent>
                 </Select>
               </div>
               <div className="text-xs text-muted-foreground">
-                {t("保存后会自动同步到 `~/.codex/models_cache.json`；如需让 `/model` 立即看到最新模型与说明，仍需重启正在运行中的 Codex 会话。Web 端可通过上方导出按钮下载同名 `models_cache.json`，再手动放入本地 `~/.codex/`；桌面端继续由本地自动同步。")}
+                {isAdminMode
+                  ? t("保存后会自动同步到 `~/.codex/models_cache.json`；如需让 `/model` 立即看到最新模型与说明，仍需重启正在运行中的 Codex 会话。Web 端可通过上方导出按钮下载同名 `models_cache.json`，再手动放入本地 `~/.codex/`；桌面端继续由本地自动同步。")
+                  : t("下游请求请使用平台模型 slug；实际来源和真实 upstream model 不在成员界面展示。")}
               </div>
             </div>
           </CardHeader>
@@ -671,7 +705,9 @@ export default function ModelsPage() {
               </div>
             ) : filteredModels.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-border/70 bg-background/35 px-6 py-10 text-sm text-muted-foreground">
-                {t("没有匹配的模型。你可以调整筛选条件，或直接新增一个自定义模型。")}
+                {isAdminMode
+                  ? t("没有匹配的模型。你可以调整筛选条件，或直接新增一个自定义模型。")
+                  : t("没有匹配的模型。你可以调整筛选条件。")}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -687,9 +723,9 @@ export default function ModelsPage() {
                       </TableHead>
                       ) : null}
                       <TableHead>{t("模型")}</TableHead>
-                      <TableHead>{t("来源")}</TableHead>
+                      {isAdminMode ? <TableHead>{t("来源")}</TableHead> : null}
                       <TableHead>{t("API")}</TableHead>
-                      <TableHead>{t("调用状态")}</TableHead>
+                      <TableHead>{isAdminMode ? t("调用状态") : t("状态")}</TableHead>
                       <TableHead>{t("可见性")}</TableHead>
                       <TableHead>{t("推理等级")}</TableHead>
                       <TableHead>{t("更新时间")}</TableHead>
@@ -731,18 +767,20 @@ export default function ModelsPage() {
                             </p>
                           </div>
                         </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-2">
-                            <Badge
-                              variant={model.sourceKind === "custom" ? "default" : "secondary"}
-                            >
-                              {model.sourceKind === "custom" ? t("自定义") : t("远端")}
-                            </Badge>
-                            {model.userEdited ? (
-                              <Badge className="bg-primary/10 text-primary">{t("已覆写")}</Badge>
-                            ) : null}
-                          </div>
-                        </TableCell>
+                        {isAdminMode ? (
+                          <TableCell>
+                            <div className="flex flex-wrap gap-2">
+                              <Badge
+                                variant={model.sourceKind === "custom" ? "default" : "secondary"}
+                              >
+                                {model.sourceKind === "custom" ? t("自定义") : t("远端")}
+                              </Badge>
+                              {model.userEdited ? (
+                                <Badge className="bg-primary/10 text-primary">{t("已覆写")}</Badge>
+                              ) : null}
+                            </div>
+                          </TableCell>
+                        ) : null}
                         <TableCell>
                           {model.supportedInApi ? (
                             <Badge className="bg-emerald-500/10 text-emerald-600">
@@ -753,31 +791,39 @@ export default function ModelsPage() {
                           )}
                         </TableCell>
                         <TableCell className="min-w-[170px]">
-                          <div className="space-y-1">
-                            <div className="flex flex-wrap gap-1">
-                              {routingStats.enabled > 0 ? (
-                                <Badge className="bg-emerald-500/10 text-emerald-600">
-                                  {t("已启用 {count} 条", { count: routingStats.enabled })}
-                                </Badge>
-                              ) : (
-                                <Badge variant="outline">{t("暂不可调用")}</Badge>
-                              )}
-                              {routingStats.total > routingStats.enabled ? (
-                                <Badge variant="secondary">
-                                  {t("候选 {count} 条", {
-                                    count: routingStats.total - routingStats.enabled,
-                                  })}
-                                </Badge>
-                              ) : null}
+                          {isAdminMode ? (
+                            <div className="space-y-1">
+                              <div className="flex flex-wrap gap-1">
+                                {routingStats.enabled > 0 ? (
+                                  <Badge className="bg-emerald-500/10 text-emerald-600">
+                                    {t("已启用 {count} 条", { count: routingStats.enabled })}
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline">{t("暂不可调用")}</Badge>
+                                )}
+                                {routingStats.total > routingStats.enabled ? (
+                                  <Badge variant="secondary">
+                                    {t("候选 {count} 条", {
+                                      count: routingStats.total - routingStats.enabled,
+                                    })}
+                                  </Badge>
+                                ) : null}
+                              </div>
+                              <div className="text-[11px] text-muted-foreground">
+                                {routingStats.sourceKinds.length > 0
+                                  ? routingStats.sourceKinds
+                                      .map((kind) => sourceKindLabel(kind, t))
+                                      .join(" / ")
+                                  : t("暂无启用来源")}
+                              </div>
                             </div>
-                            <div className="text-[11px] text-muted-foreground">
-                              {routingStats.sourceKinds.length > 0
-                                ? routingStats.sourceKinds
-                                    .map((kind) => sourceKindLabel(kind, t))
-                                    .join(" / ")
-                                : t("暂无启用来源")}
-                            </div>
-                          </div>
+                          ) : routingStats.enabled > 0 ? (
+                            <Badge className="bg-emerald-500/10 text-emerald-600">
+                              {t("可调用")}
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline">{t("暂不可调用")}</Badge>
+                          )}
                         </TableCell>
                         <TableCell>
                           {model.visibility === "list" ? (

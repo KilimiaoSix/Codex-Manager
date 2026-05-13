@@ -5,6 +5,7 @@ import { getTopLevelRouteLabel } from "@/lib/app-shell/top-level-routes";
 import { useAppStore } from "@/lib/store/useAppStore";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n/provider";
+import { useAppSession } from "@/hooks/useAppSession";
 
 const ROOT_ROUTE_PATH = "/";
 
@@ -14,6 +15,8 @@ export function ShellTabs() {
   const openShellTabs = useAppStore((state) => state.openShellTabs);
   const navigateShellPath = useAppStore((state) => state.navigateShellPath);
   const closeShellTab = useAppStore((state) => state.closeShellTab);
+  const { data: session } = useAppSession();
+  const role = session?.role ?? "member";
 
   if (openShellTabs.length <= 1) {
     return null;
@@ -24,7 +27,7 @@ export function ShellTabs() {
       <div className="flex flex-wrap items-center gap-2">
         {openShellTabs.map((path) => {
           const isActive = path === currentShellPath;
-          const label = t(getTopLevelRouteLabel(path));
+          const label = t(getTopLevelRouteLabel(path, role));
           const canClose = path !== ROOT_ROUTE_PATH;
 
           return (

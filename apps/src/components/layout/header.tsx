@@ -20,6 +20,7 @@ import {
   normalizeServiceAddr,
 } from "@/lib/utils/service";
 import { getTopLevelRouteLabel } from "@/lib/app-shell/top-level-routes";
+import { useAppSession } from "@/hooks/useAppSession";
 
 const DEFAULT_SERVICE_ADDR = "localhost:48760";
 
@@ -48,6 +49,8 @@ export function Header() {
   const [isToggling, setIsToggling] = useState(false);
   const [portInput, setPortInput] = useState("48760");
   const { canManageService, mode } = useRuntimeCapabilities();
+  const { data: session } = useAppSession();
+  const role = session?.role ?? "member";
 
   useEffect(() => {
     const current = String(serviceStatus.addr || DEFAULT_SERVICE_ADDR);
@@ -69,11 +72,7 @@ export function Header() {
    * 返回函数执行结果
    */
   const getPageTitle = () => {
-      if (currentShellPath === "/settings") {
-        return t("应用设置");
-      }
-
-      return t(getTopLevelRouteLabel(currentShellPath));
+    return t(getTopLevelRouteLabel(currentShellPath, role));
   };
 
   const canLogoutWebSession =

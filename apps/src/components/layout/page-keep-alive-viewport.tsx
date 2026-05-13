@@ -78,11 +78,17 @@ function PagePanelFallback({ title }: { title: string }) {
   );
 }
 
-function LazyPagePanel({ path }: { path: TopLevelRoutePath }) {
+function LazyPagePanel({
+  path,
+  role,
+}: {
+  path: TopLevelRoutePath;
+  role: string;
+}) {
   const LazyPage = path === ROOT_ROUTE_PATH ? ROOT_PAGE_COMPONENT : LAZY_PAGE_COMPONENTS[path];
 
   return (
-    <Suspense fallback={<PagePanelFallback title={getTopLevelRouteLabel(path)} />}>
+    <Suspense fallback={<PagePanelFallback title={getTopLevelRouteLabel(path, role)} />}>
       <LazyPage />
     </Suspense>
   );
@@ -123,8 +129,8 @@ export function PageKeepAliveViewport({
   }, [syncShellPathFromLocation]);
 
   useEffect(() => {
-    document.title = `${t(getTopLevelRouteLabel(currentShellPath))} - CodexManager`;
-  }, [currentShellPath, t]);
+    document.title = `${t(getTopLevelRouteLabel(currentShellPath, role))} - CodexManager`;
+  }, [currentShellPath, role, t]);
 
   useEffect(() => {
     if (isSessionLoading) return;
@@ -152,7 +158,7 @@ export function PageKeepAliveViewport({
                 isActive ? "block" : "hidden",
               )}
             >
-              {isInitialPanel ? initialChildren : <LazyPagePanel path={path} />}
+              {isInitialPanel ? initialChildren : <LazyPagePanel path={path} role={role} />}
             </section>
           );
         })}
